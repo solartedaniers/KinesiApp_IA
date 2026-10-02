@@ -1,0 +1,89 @@
+"""Riesgo por patrones (§5.2 y §5.6): rampas, estrategias y RiskScoreAggregator."""
+import math
+
+import pytest
+
+from app.analysis.movement_windows import MovementWindow
+from app.analysis.risk import KneeFlexionRiskStrategy, LinearRamp, RiskScoreAggregator, TrunkFlexionRiskStrategy
+from app.core.config import settings
+from app.services.jump_video_analyzer_factory import build_jump_risk_profile, build_squat_risk_profile
+from tests.pose_fixtures import angle_series
+
+WHOLE = MovementWindow(0, 2)
+
+
+def test_linear_ramp_rises_or_falls_and_clamps():
+    rising, falling = LinearRamp(40, 60), LinearRamp(60, 30)
+    assert [rising.score(v) for v in (30, 50, 70)] == [0, 0.5, 1]
+    assert [falling.score(v) for v in (70, 45, 20)] == [0, 0.5, 1]
+    assert math.isnan(rising.score(math.nan))
+
+
+def test_strategies_score_the_peak_inside_the_window_only():
+    angles = angle_series([90, 20, 30, 40, 90], [0, 10, 50, 10, 0])
+    window = MovementWindow(1, 3)
+    assert KneeFlexionRiskStrategy({"deep": LinearRamp(0, 80)}).score(angles, window) == {"deep": 0.5}
+    assert TrunkFlexionRiskStrategy({"lean": LinearRamp(0, 100)}).score(angles, window) == {"lean": 0.5}
+
+
+def test_pattern_needs_all_its_partials_and_uses_the_worst_pattern():
+    aggregator = RiskScoreAggregator(
+        strategies=[
+            KneeFlexionRiskStrategy({"knee_deep": LinearRamp(80, 100)}),
+            TrunkFlexionRiskStrategy({"trunk_lean": LinearRamp(25, 45)}),
+        ],
+        patterns={"forward_collapse": ["knee_deep", "trunk_lean"]},
+    )
+    deep_upright = aggregator.aggregate(angle_series([110] * 3, [5] * 3), [WHOLE])
+    assert (deep_upright.risk_score, deep_upright.dominant_pattern) == (0, None)
+    collapse = aggregator.aggregate(angle_series([110] * 3, [60] * 3), [WHOLE])
+    assert (collapse.risk_score, collapse.dominant_pattern) == (1, "forward_collapse")
+
+
+def test_repetitions_are_combined_with_the_median():
+    aggregator = RiskScoreAggregator(
+        [KneeFlexionRiskStrategy({"knee_deep": LinearRamp(0, 100)})], {"deep": ["knee_deep"]}
+    )
+    angles = angle_series([10, 90, 30], [0, 0, 0])
+    windows = [MovementWindow(frame, frame) for frame in range(3)]
+    assert aggregator.aggregate(angles, windows).risk_score == pytest.approx(0.3)
+
+
+def test_pattern_with_unknown_partial_is_a_configuration_error():
+    with pytest.raises(ValueError):
+        RiskScoreAggregator([KneeFlexionRiskStrategy({"knee_deep": LinearRamp(0, 1)})], {"p": ["trunk_lean"]})
+
+
+# Criterios de aceptación de la Fase 4 (§11) con los umbrales configurados por defecto
+@pytest.mark.parametrize(
+    ("knee_flexion", "trunk_inclination", "expected_pattern"),
+    [
+        (20, 5, "rigid_landing"),
+        (110, 60, "forward_collapse"),
+        (110, 5, None),
+    ],
+    ids=["rigid", "collapse", "deep-but-upright"],
+)
+def test_default_jump_patterns(knee_flexion, trunk_inclination, expected_pattern):
+    aggregator = build_jump_risk_profile(settings).aggregator
+    risk = aggregator.aggregate(angle_series([knee_flexion] * 3, [trunk_inclination] * 3), [WHOLE])
+    assert risk.dominant_pattern == expected_pattern
+    assert (risk.risk_score > 0) == (expected_pattern is not None)
+
+
+@pytest.mark.parametrize(
+    ("knee_flexion", "trunk_inclination", "expected_pattern"),
+    [
+        # Como sentadilla_mal_echa: se dobla por la cadera en vez de por la rodilla
+        (65, 105, "hip_hinge_squat"),
+        # Como sentadilla_bien_echa: profunda, el tronco acompaña
+        (105, 58, None),
+        (100, 105, None),
+        (65, 20, None),
+    ],
+    ids=["hip-hinge", "deep-good", "deep-and-leaning", "shallow-upright"],
+)
+def test_default_squat_pattern_is_trunk_lean_without_knee_flexion(knee_flexion, trunk_inclination, expected_pattern):
+    aggregator = build_squat_risk_profile(settings).aggregator
+    risk = aggregator.aggregate(angle_series([knee_flexion] * 3, [trunk_inclination] * 3), [WHOLE])
+    assert risk.dominant_pattern == expected_pattern
