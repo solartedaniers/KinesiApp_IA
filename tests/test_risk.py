@@ -3,13 +3,13 @@ import math
 
 import pytest
 
-from app.analysis.movement_windows import MovementWindow
+from app.analysis.movement_windows import DetectionMethod, MovementWindow
 from app.analysis.risk import KneeFlexionRiskStrategy, LinearRamp, RiskScoreAggregator, TrunkFlexionRiskStrategy
 from app.core.config import settings
 from app.services.jump_video_analyzer_factory import build_jump_risk_profile, build_squat_risk_profile
 from tests.pose_fixtures import angle_series
 
-WHOLE = MovementWindow(0, 2)
+WHOLE = MovementWindow(0, 2, DetectionMethod.LANDING)
 
 
 def test_linear_ramp_rises_or_falls_and_clamps():
@@ -21,9 +21,12 @@ def test_linear_ramp_rises_or_falls_and_clamps():
 
 def test_strategies_score_the_peak_inside_the_window_only():
     angles = angle_series([90, 20, 30, 40, 90], [0, 10, 50, 10, 0])
-    window = MovementWindow(1, 3)
-    assert KneeFlexionRiskStrategy({"deep": LinearRamp(0, 80)}).score(angles, window) == {"deep": 0.5}
-    assert TrunkFlexionRiskStrategy({"lean": LinearRamp(0, 100)}).score(angles, window) == {"lean": 0.5}
+    window = MovementWindow(1, 3, DetectionMethod.LANDING)
+    knee = KneeFlexionRiskStrategy({"deep": LinearRamp(0, 80)}).score(angles, window)["deep"]
+    trunk = TrunkFlexionRiskStrategy({"lean": LinearRamp(100, 0)}).score(angles, window)["lean"]
+    assert (knee.signal, knee.measured_deg, knee.score, knee.higher_is_riskier) == ("knee_flexion", 40, 0.5, True)
+    assert (trunk.signal, trunk.measured_deg, trunk.score, trunk.higher_is_riskier) == ("trunk_inclination", 50, 0.5, False)
+    assert (trunk.onset_deg, trunk.saturation_deg) == (100, 0)
 
 
 def test_pattern_needs_all_its_partials_and_uses_the_worst_pattern():
@@ -45,7 +48,7 @@ def test_repetitions_are_combined_with_the_median():
         [KneeFlexionRiskStrategy({"knee_deep": LinearRamp(0, 100)})], {"deep": ["knee_deep"]}
     )
     angles = angle_series([10, 90, 30], [0, 0, 0])
-    windows = [MovementWindow(frame, frame) for frame in range(3)]
+    windows = [MovementWindow(frame, frame, DetectionMethod.LANDING) for frame in range(3)]
     assert aggregator.aggregate(angles, windows).risk_score == pytest.approx(0.3)
 
 

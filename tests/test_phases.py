@@ -3,7 +3,7 @@ import numpy as np
 
 from app.analysis.angles import AngleCalculator
 from app.analysis.jump_phases import JumpPhaseDetector
-from app.analysis.movement_windows import MovementWindow
+from app.analysis.movement_windows import DetectionMethod, MovementWindow
 from app.analysis.pose_series import LEFT_ANKLE, LEFT_HEEL, LEFT_HIP, RIGHT_ANKLE, RIGHT_HEEL, RIGHT_HIP
 from app.analysis.squat_phases import SquatBottomDetector
 from app.analysis.trunk_hinge import FallbackWindowDetector, TrunkHingeDetector
@@ -36,6 +36,7 @@ def test_landing_window_starts_at_ground_contact():
     windows = _detect_jumps(points)
     window_frames = round(LANDING_WINDOW_MS / 1000 * FPS)
     assert len(windows) == 1
+    assert windows[0].detected_by == DetectionMethod.LANDING
     # La trayectoria vuelve al suelo (menos del 3 % del cuerpo) apenas antes del frame 45
     assert 43 <= windows[0].start_frame <= 45
     assert windows[0].end_frame == windows[0].start_frame + window_frames
@@ -93,7 +94,7 @@ def test_squat_bottoms_are_deep_knee_flexion_peaks():
     windows = detector.detect(series, angle_series(flexion, [0.0] * len(flexion)))
     # La segunda bajada (40°) no llega a la flexión mínima: no cuenta como repetición
     half = round(0.1 * FPS)
-    assert windows == [MovementWindow(24 - half, 24 + half)]
+    assert windows == [MovementWindow(24 - half, 24 + half, DetectionMethod.KNEE_BOTTOM)]
 
 
 def _hinge_detector() -> TrunkHingeDetector:
@@ -111,7 +112,7 @@ def test_each_sustained_trunk_lean_is_one_repetition_around_its_peak():
     windows = _hinge_detector().detect(*_trunk_only(trunk))
     half = round(0.1 * FPS)
     assert len(windows) == 2
-    assert windows[0] == MovementWindow(20 - half, 20 + half)
+    assert windows[0] == MovementWindow(20 - half, 20 + half, DetectionMethod.TRUNK_HINGE)
 
 
 def test_brief_trunk_lean_is_not_a_repetition():
