@@ -29,6 +29,22 @@ class LinearRamp:
         return min(1.0, max(0.0, (value - self.onset) / (self.saturation - self.onset)))
 
 
+@dataclass(frozen=True)
+class PartialScore:
+    """Score de una señal en una repetición, con lo necesario para explicarlo: el ángulo medido y
+    la rampa vigente al procesar (así no se relee de Settings, que puede haber cambiado)."""
+
+    signal: str
+    score: float
+    measured_deg: float
+    onset_deg: float
+    saturation_deg: float
+
+    @property
+    def higher_is_riskier(self) -> bool:
+        return self.saturation_deg > self.onset_deg
+
+
 class RiskScoringStrategy(Protocol):
     """Una señal medida en la ventana; devuelve uno o más parciales nombrados. No decide sola si
     hay riesgo: eso lo hace el aggregator al combinar parciales por patrones."""
@@ -36,7 +52,7 @@ class RiskScoringStrategy(Protocol):
     @property
     def partial_codes(self) -> frozenset[str]: ...
 
-    def score(self, angles: AngleSeries, window: MovementWindow) -> dict[str, float]: ...
+    def score(self, angles: AngleSeries, window: MovementWindow) -> dict[str, PartialScore]: ...
 
 
 def _peak(values: np.ndarray, window: MovementWindow) -> float:
@@ -44,8 +60,17 @@ def _peak(values: np.ndarray, window: MovementWindow) -> float:
     return math.nan if np.isnan(in_window).all() else float(np.nanmax(in_window))
 
 
+def _score_peak(signal: str, peak: float, ramps: dict[str, LinearRamp]) -> dict[str, PartialScore]:
+    return {
+        code: PartialScore(signal, ramp.score(peak), peak, ramp.onset, ramp.saturation)
+        for code, ramp in ramps.items()
+    }
+
+
 class KneeFlexionRiskStrategy:
     """Flexión máxima de rodilla en la ventana."""
+
+    SIGNAL = "knee_flexion"
 
     def __init__(self, ramps: dict[str, LinearRamp]) -> None:
         self._ramps = ramps
@@ -54,14 +79,15 @@ class KneeFlexionRiskStrategy:
     def partial_codes(self) -> frozenset[str]:
         return frozenset(self._ramps)
 
-    def score(self, angles: AngleSeries, window: MovementWindow) -> dict[str, float]:
-        peak = _peak(angles.knee_flexion, window)
-        return {code: ramp.score(peak) for code, ramp in self._ramps.items()}
+    def score(self, angles: AngleSeries, window: MovementWindow) -> dict[str, PartialScore]:
+        return _score_peak(self.SIGNAL, _peak(angles.knee_flexion, window), self._ramps)
 
 
 class TrunkFlexionRiskStrategy:
     """Inclinación máxima del tronco respecto de la vertical en la ventana."""
 
+    SIGNAL = "trunk_inclination"
+
     def __init__(self, ramps: dict[str, LinearRamp]) -> None:
         self._ramps = ramps
 
@@ -69,9 +95,16 @@ class TrunkFlexionRiskStrategy:
     def partial_codes(self) -> frozenset[str]:
         return frozenset(self._ramps)
 
-    def score(self, angles: AngleSeries, window: MovementWindow) -> dict[str, float]:
-        peak = _peak(angles.trunk_inclination, window)
-        return {code: ramp.score(peak) for code, ramp in self._ramps.items()}
+    def score(self, angles: AngleSeries, window: MovementWindow) -> dict[str, PartialScore]:
+        return _score_peak(self.SIGNAL, _peak(angles.trunk_inclination, window), self._ramps)
+
+
+@dataclass(frozen=True)
+class RepetitionRisk:
+    window: MovementWindow
+    partials: dict[str, PartialScore]
+    # NaN si a la repetición le falta alguna señal del patrón
+    pattern_scores: dict[str, float]
 
 
 @dataclass(frozen=True)
@@ -79,6 +112,8 @@ class AggregatedRisk:
     risk_score: float
     dominant_pattern: str | None
     pattern_scores: dict[str, float]
+    patterns: dict[str, list[str]]
+    repetitions: list[RepetitionRisk]
 
 
 class RiskScoreAggregator:
@@ -99,28 +134,28 @@ class RiskScoreAggregator:
         self._patterns = patterns
 
     def aggregate(self, angles: AngleSeries, windows: list[MovementWindow]) -> AggregatedRisk:
-        per_window = [self._partials(angles, window) for window in windows]
+        repetitions = [self._repetition(angles, window) for window in windows]
         pattern_scores = {}
-        for pattern, required in self._patterns.items():
-            scores = [
-                min(values)
-                for values in ([partials[code] for code in required] for partials in per_window)
-                if not any(math.isnan(value) for value in values)
-            ]
+        for pattern in self._patterns:
+            scores = [rep.pattern_scores[pattern] for rep in repetitions if not math.isnan(rep.pattern_scores[pattern])]
             if scores:
                 pattern_scores[pattern] = median(scores)
-        if not pattern_scores:
-            return AggregatedRisk(risk_score=0.0, dominant_pattern=None, pattern_scores={})
-        dominant = max(pattern_scores, key=pattern_scores.get)
-        risk_score = pattern_scores[dominant]
+        dominant = max(pattern_scores, key=pattern_scores.get) if pattern_scores else None
+        risk_score = pattern_scores[dominant] if dominant else 0.0
         return AggregatedRisk(
             risk_score=risk_score,
             dominant_pattern=dominant if risk_score > 0 else None,
             pattern_scores=pattern_scores,
+            patterns=self._patterns,
+            repetitions=repetitions,
         )
 
-    def _partials(self, angles: AngleSeries, window: MovementWindow) -> dict[str, float]:
-        partials: dict[str, float] = {}
+    def _repetition(self, angles: AngleSeries, window: MovementWindow) -> RepetitionRisk:
+        partials: dict[str, PartialScore] = {}
         for strategy in self._strategies:
             partials.update(strategy.score(angles, window))
-        return partials
+        pattern_scores = {}
+        for pattern, required in self._patterns.items():
+            scores = [partials[code].score for code in required]
+            pattern_scores[pattern] = math.nan if any(math.isnan(score) for score in scores) else min(scores)
+        return RepetitionRisk(window=window, partials=partials, pattern_scores=pattern_scores)
