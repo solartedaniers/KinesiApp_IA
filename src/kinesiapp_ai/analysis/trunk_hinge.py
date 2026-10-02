@@ -1,7 +1,7 @@
 import numpy as np
 
 from app.analysis.angles import AngleSeries
-from app.analysis.movement_windows import MovementWindow, MovementWindowDetector
+from app.analysis.movement_windows import DetectionMethod, MovementWindow, MovementWindowDetector
 from app.analysis.pose_series import PoseSeries
 
 
@@ -33,7 +33,9 @@ class TrunkHingeDetector:
             if end - start < min_frames:
                 continue
             peak = start + int(np.nanargmax(trunk[start:end]))
-            windows.append(MovementWindow(max(0, peak - half), min(peak + half, last_frame)))
+            windows.append(
+                MovementWindow(max(0, peak - half), min(peak + half, last_frame), DetectionMethod.TRUNK_HINGE)
+            )
         return windows
 
 

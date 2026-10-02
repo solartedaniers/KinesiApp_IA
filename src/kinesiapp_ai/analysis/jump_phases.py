@@ -2,7 +2,7 @@ import numpy as np
 from scipy.signal import find_peaks
 
 from app.analysis.angles import AngleSeries
-from app.analysis.movement_windows import MovementWindow
+from app.analysis.movement_windows import DetectionMethod, MovementWindow
 from app.analysis.pose_series import (
     LEFT_ANKLE,
     LEFT_FOOT_INDEX,
@@ -76,7 +76,9 @@ class JumpPhaseDetector:
             # Un "aterrizaje" en los últimos frames es el pie saliendo del cuadro, no un contacto
             if landing >= series.frame_count - self._landing_end_margin_frames:
                 continue
-            windows.append(MovementWindow(landing, min(landing + window_frames, last_frame)))
+            windows.append(
+                MovementWindow(landing, min(landing + window_frames, last_frame), DetectionMethod.LANDING)
+            )
         return windows
 
     @staticmethod

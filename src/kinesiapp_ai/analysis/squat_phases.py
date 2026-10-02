@@ -2,7 +2,7 @@ import numpy as np
 from scipy.signal import find_peaks
 
 from app.analysis.angles import AngleSeries
-from app.analysis.movement_windows import MovementWindow
+from app.analysis.movement_windows import DetectionMethod, MovementWindow
 from app.analysis.pose_series import PoseSeries
 
 
@@ -37,7 +37,9 @@ class SquatBottomDetector:
         half = series.seconds_to_frames(self._window_ms / 2000)
         last_frame = series.frame_count - 1
         return [
-            MovementWindow(max(0, int(bottom) - half), min(int(bottom) + half, last_frame))
+            MovementWindow(
+                max(0, int(bottom) - half), min(int(bottom) + half, last_frame), DetectionMethod.KNEE_BOTTOM
+            )
             for bottom in bottoms
             if flexion[bottom] >= self._min_flexion_deg
         ]

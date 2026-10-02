@@ -1,8 +1,17 @@
+import enum
 from dataclasses import dataclass
 from typing import Protocol
 
 from app.analysis.angles import AngleSeries
 from app.analysis.pose_series import PoseSeries
+
+
+class DetectionMethod(str, enum.Enum):
+    """Cómo se encontró la repetición: el chat lo usa para explicar el resultado."""
+
+    LANDING = "landing"
+    KNEE_BOTTOM = "knee_bottom"
+    TRUNK_HINGE = "trunk_hinge"
 
 
 @dataclass(frozen=True)
@@ -12,6 +21,7 @@ class MovementWindow:
 
     start_frame: int
     end_frame: int
+    detected_by: DetectionMethod
 
     def slice(self) -> slice:
         return slice(self.start_frame, self.end_frame + 1)
