@@ -2,6 +2,11 @@
 # versión: se guarda en cada respuesta del asistente para saber con qué instrucciones se generó
 SYSTEM_PROMPT_VERSION = "chat-system-prompt-v1"
 
+# Turno de usuario con el que se pide la primera explicación, apenas el análisis está listo. No es
+# otro prompt: las instrucciones siguen siendo SYSTEM_PROMPT_TEMPLATE, que ya pide explicar el
+# resultado. No se guarda ni se muestra: el hilo empieza con la respuesta del asistente
+OPENING_REQUEST = "Explícame el resultado de este análisis: qué se detectó, por qué y en qué conviene trabajar."
+
 SYSTEM_PROMPT_TEMPLATE = """Eres el asistente de KinesiApp, una herramienta de apoyo para entrenadores y deportistas que
 analiza la técnica de saltos y sentadillas a partir de un video. Tu tarea es explicar, en
 español claro y sin tecnicismos innecesarios, el resultado de UN análisis concreto que aparece

@@ -4,7 +4,7 @@ from typing import Any
 from app.analysis.risk_details import RISK_DETAILS_FORMAT_VERSION
 from app.chat.llm import LlmRequest, LlmTurn
 from app.chat.pattern_catalog import RiskPatternCatalog
-from app.chat.system_prompt import SYSTEM_PROMPT_TEMPLATE
+from app.chat.system_prompt import OPENING_REQUEST, SYSTEM_PROMPT_TEMPLATE
 from app.models.chat import ChatMessage, ChatRole
 from app.models.jump_analysis import JumpAnalysis
 from app.models.user import UserRole
@@ -42,6 +42,10 @@ class JumpAnalysisPromptBuilder:
             system_instruction=system_instruction,
             turns=[*self._history_turns(history), LlmTurn(role="user", text=user_message)],
         )
+
+    def build_opening(self, analysis: JumpAnalysis, audience: UserRole) -> LlmRequest:
+        """Primera explicación del resultado: mismos datos y mismo system prompt que el chat."""
+        return self.build(analysis, audience, [], OPENING_REQUEST)
 
     def analysis_data(self, analysis: JumpAnalysis, audience: UserRole) -> dict[str, Any]:
         details = analysis.risk_details
@@ -152,9 +156,16 @@ class JumpAnalysisPromptBuilder:
             or (index + 1 < len(history) and history[index + 1].role == ChatRole.ASSISTANT)
         ]
         recent = answered[-self._max_history_messages:] if self._max_history_messages else []
+        # El historial debe empezar con un turno de usuario. Si empieza con la explicación inicial
+        # (primer mensaje del hilo), se antepone el pedido que la generó para no perderla; si es una
+        # respuesta cuya pregunta quedó fuera de la ventana, se descarta como antes
+        opening: list[LlmTurn] = []
         if recent and recent[0].role == ChatRole.ASSISTANT:
-            recent = recent[1:]
-        return [
+            if recent[0] is history[0]:
+                opening = [LlmTurn(role="user", text=OPENING_REQUEST)]
+            else:
+                recent = recent[1:]
+        return opening + [
             LlmTurn(role="model" if message.role == ChatRole.ASSISTANT else "user", text=message.content)
             for message in recent
         ]
