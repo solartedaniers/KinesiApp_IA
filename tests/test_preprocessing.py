@@ -2,8 +2,8 @@
 import numpy as np
 import pytest
 
-from app.analysis.pose_series import LEFT_ANKLE
-from app.analysis.preprocessing import LandmarkSeriesPreprocessor
+from kinesiapp_ai.analysis.pose_series import LEFT_ANKLE
+from kinesiapp_ai.analysis.preprocessing import LandmarkSeriesPreprocessor
 from tests.pose_fixtures import pose_series, standing_points
 
 

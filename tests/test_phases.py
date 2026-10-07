@@ -1,12 +1,12 @@
 """JumpPhaseDetector (las tres reglas de §5.1) y SquatBottomDetector, sobre series sintéticas."""
 import numpy as np
 
-from app.analysis.angles import AngleCalculator
-from app.analysis.jump_phases import JumpPhaseDetector
-from app.analysis.movement_windows import DetectionMethod, MovementWindow
-from app.analysis.pose_series import LEFT_ANKLE, LEFT_HEEL, LEFT_HIP, RIGHT_ANKLE, RIGHT_HEEL, RIGHT_HIP
-from app.analysis.squat_phases import SquatBottomDetector
-from app.analysis.trunk_hinge import FallbackWindowDetector, TrunkHingeDetector
+from kinesiapp_ai.analysis.angles import AngleCalculator
+from kinesiapp_ai.analysis.jump_phases import JumpPhaseDetector
+from kinesiapp_ai.analysis.movement_windows import DetectionMethod, MovementWindow
+from kinesiapp_ai.analysis.pose_series import LEFT_ANKLE, LEFT_HEEL, LEFT_HIP, RIGHT_ANKLE, RIGHT_HEEL, RIGHT_HIP
+from kinesiapp_ai.analysis.squat_phases import SquatBottomDetector
+from kinesiapp_ai.analysis.trunk_hinge import FallbackWindowDetector, TrunkHingeDetector
 from tests.pose_fixtures import FEET, FPS, add_jump, angle_series, pose_series, standing_points
 
 LANDING_WINDOW_MS = 300

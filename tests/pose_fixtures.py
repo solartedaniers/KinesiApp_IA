@@ -1,8 +1,8 @@
 """Series de pose sintéticas con geometría conocida, para probar el dominio sin MediaPipe."""
 import numpy as np
 
-from app.analysis.angles import AngleSeries
-from app.analysis.pose_series import (
+from kinesiapp_ai.analysis.angles import AngleSeries
+from kinesiapp_ai.analysis.pose_series import (
     LANDMARK_COUNT,
     LEFT_ANKLE,
     LEFT_FOOT_INDEX,

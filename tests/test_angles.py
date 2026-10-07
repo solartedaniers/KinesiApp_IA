@@ -2,8 +2,8 @@
 import numpy as np
 import pytest
 
-from app.analysis.angles import AngleCalculator
-from app.analysis.pose_series import LANDMARK_COUNT, SIDE_LANDMARKS, Side
+from kinesiapp_ai.analysis.angles import AngleCalculator
+from kinesiapp_ai.analysis.pose_series import LANDMARK_COUNT, SIDE_LANDMARKS, Side
 from tests.pose_fixtures import pose_series
 
 LEFT = SIDE_LANDMARKS[Side.LEFT]
