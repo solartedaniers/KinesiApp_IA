@@ -21,6 +21,30 @@ class BoundingBox:
         return (self.x2 - self.x1) * (self.y2 - self.y1)
 
 
+def select_main_person(
+    boxes: list[BoundingBox], frame_width: int, frame_height: int, min_relative_area: float
+) -> BoundingBox | None:
+    """La persona que se está grabando cuando otra compite con ella; None si no hace falta elegir.
+
+    Solo compiten las cajas de al menos `min_relative_area` del área de la más grande: un reflejo en
+    un espejo o alguien lejos al fondo no es otra persona que pueda confundir al modelo de pose. Entre
+    las que compiten gana la más grande y más centrada (área × cercanía al centro del frame).
+    """
+    if not boxes:
+        return None
+    largest_area = max(box.area for box in boxes)
+    contenders = [box for box in boxes if box.area >= min_relative_area * largest_area]
+    if len(contenders) < 2:
+        return None
+    half_diagonal = np.hypot(frame_width, frame_height) / 2
+
+    def score(box: BoundingBox) -> float:
+        offset = np.hypot((box.x1 + box.x2 - frame_width) / 2, (box.y1 + box.y2 - frame_height) / 2)
+        return box.area * (1 - offset / half_diagonal)
+
+    return max(contenders, key=score)
+
+
 class PersonDetector(Protocol):
     """Frontera hacia el detector de personas: el resto del dominio no sabe que existe YOLO."""
 
