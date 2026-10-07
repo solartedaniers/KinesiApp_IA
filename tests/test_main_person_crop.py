@@ -5,10 +5,12 @@ from pathlib import Path
 
 import numpy as np
 
+from kinesiapp_ai.analysis.angles import AngleCalculator, AngleSeries
 from kinesiapp_ai.analysis.person_detection import BoundingBox, select_main_person
 from kinesiapp_ai.analysis.pose_extraction import MainPersonCropper, VideoPoseExtractor
-from kinesiapp_ai.analysis.pose_series import LANDMARK_COUNT
+from kinesiapp_ai.analysis.pose_series import LANDMARK_COUNT, LEFT_KNEE, RIGHT_KNEE
 from kinesiapp_ai.analysis.video_reader import VideoStream
+from tests.pose_fixtures import add_hip_hinge, standing_points
 
 WIDTH, HEIGHT = 640, 480
 MARGIN = 0.25
@@ -48,6 +50,37 @@ class _RecordingEstimator:
 
     def close(self) -> None:
         pass
+
+
+class _PixelPoseEstimator:
+    """Estimador que "ve" la pose en los píxeles: el canal i marca el píxel del landmark i. Como un
+    modelo real, devuelve coordenadas normalizadas a la imagen que recibe, sea el frame o un recorte."""
+
+    def __init__(self) -> None:
+        self.received_shapes: list[tuple[int, ...]] = []
+
+    def estimate(self, frame_bgr: np.ndarray, timestamp_ms: int) -> np.ndarray:
+        self.received_shapes.append(frame_bgr.shape)
+        height, width = frame_bgr.shape[:2]
+        pose = np.ones((LANDMARK_COUNT, 3))
+        for index in range(LANDMARK_COUNT):
+            row, column = np.argwhere(frame_bgr[:, :, index])[0]
+            pose[index, :2] = (column + 0.5) / width, (row + 0.5) / height
+        return pose
+
+    def close(self) -> None:
+        pass
+
+
+def _render(points: np.ndarray) -> list[np.ndarray]:
+    """Un frame por pose, con un canal por landmark marcado en su píxel."""
+    frames = []
+    for pose in points:
+        frame = np.zeros((HEIGHT, WIDTH, LANDMARK_COUNT), dtype=np.uint8)
+        for index, (x, y) in enumerate(pose):
+            frame[int(y * HEIGHT), int(x * WIDTH), index] = 1
+        frames.append(frame)
+    return frames
 
 
 def _select(*boxes: BoundingBox) -> BoundingBox | None:
@@ -94,3 +127,27 @@ def test_with_several_people_the_estimator_only_gets_the_main_one_plus_margin():
     estimator, _ = _extract([passerby, ATHLETE], np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8))
     # 160×360 más 25 % por lado: x de 200 a 440, y de 10 a 550 recortado al alto del frame
     assert estimator.received[0].shape == (HEIGHT - 10, 440 - 200, 3)
+
+
+def test_angles_of_a_cropped_person_match_the_uncropped_ones():
+    points = standing_points(6)
+    add_hip_hinge(points, 3, 6)
+    for index in (LEFT_KNEE, RIGHT_KNEE):
+        points[:, index, 0] += np.linspace(0, 0.08, 6)
+    frames = _render(points)
+    # La caja del atleta rodea sus landmarks (x de 0.5 a 0.75, y de 0.4 a 0.9); la del que pasa compite
+    detector = _FakeDetector([BoundingBox(300, 180, 500, 440), BoundingBox(20, 100, 180, 420)])
+
+    def angles(cropper: MainPersonCropper | None) -> tuple[AngleSeries, _PixelPoseEstimator]:
+        estimator = _PixelPoseEstimator()
+        series = VideoPoseExtractor(_FakeReader(frames), lambda: estimator, cropper).extract(Path("video.mp4"))
+        return AngleCalculator().calculate(series), estimator
+
+    full, _ = angles(None)
+    cropped, estimator = angles(MainPersonCropper(detector, MARGIN, MIN_RELATIVE_AREA))
+
+    assert all(shape[:2] != (HEIGHT, WIDTH) for shape in estimator.received_shapes)
+    assert np.ptp(full.knee_flexion) > 1 and np.ptp(full.trunk_inclination) > 1
+    assert cropped.side == full.side
+    np.testing.assert_allclose(cropped.knee_flexion, full.knee_flexion, atol=1e-9)
+    np.testing.assert_allclose(cropped.trunk_inclination, full.trunk_inclination, atol=1e-9)
