@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from app.analysis.pose_series import SIDE_LANDMARKS, PoseSeries, Side
+from kinesiapp_ai.analysis.pose_series import SIDE_LANDMARKS, PoseSeries, Side
 
 
 @dataclass(frozen=True)

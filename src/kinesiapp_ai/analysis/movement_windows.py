@@ -2,8 +2,8 @@ import enum
 from dataclasses import dataclass
 from typing import Protocol
 
-from app.analysis.angles import AngleSeries
-from app.analysis.pose_series import PoseSeries
+from kinesiapp_ai.analysis.angles import AngleSeries
+from kinesiapp_ai.analysis.pose_series import PoseSeries
 
 
 class DetectionMethod(str, enum.Enum):

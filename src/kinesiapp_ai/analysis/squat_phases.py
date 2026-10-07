@@ -1,9 +1,9 @@
 import numpy as np
 from scipy.signal import find_peaks
 
-from app.analysis.angles import AngleSeries
-from app.analysis.movement_windows import DetectionMethod, MovementWindow
-from app.analysis.pose_series import PoseSeries
+from kinesiapp_ai.analysis.angles import AngleSeries
+from kinesiapp_ai.analysis.movement_windows import DetectionMethod, MovementWindow
+from kinesiapp_ai.analysis.pose_series import PoseSeries
 
 
 class SquatBottomDetector:

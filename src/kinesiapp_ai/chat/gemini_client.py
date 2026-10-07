@@ -2,7 +2,7 @@ import httpx
 from google import genai
 from google.genai import errors, types
 
-from app.chat.llm import LlmRequest, LlmUnavailableError
+from kinesiapp_ai.chat.llm import LlmRequest, LlmUnavailableError
 
 
 class GeminiLlmClient:

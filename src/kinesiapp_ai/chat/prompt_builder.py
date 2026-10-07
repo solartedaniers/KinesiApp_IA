@@ -1,10 +1,10 @@
 import json
 from typing import Any
 
-from app.analysis.risk_details import RISK_DETAILS_FORMAT_VERSION
-from app.chat.llm import LlmRequest, LlmTurn
-from app.chat.pattern_catalog import RiskPatternCatalog
-from app.chat.system_prompt import OPENING_REQUEST, SYSTEM_PROMPT_TEMPLATE
+from kinesiapp_ai.analysis.risk_details import RISK_DETAILS_FORMAT_VERSION
+from kinesiapp_ai.chat.llm import LlmRequest, LlmTurn
+from kinesiapp_ai.chat.pattern_catalog import RiskPatternCatalog
+from kinesiapp_ai.chat.system_prompt import OPENING_REQUEST, SYSTEM_PROMPT_TEMPLATE
 from app.models.chat import ChatMessage, ChatRole
 from app.models.jump_analysis import JumpAnalysis
 from app.models.user import UserRole

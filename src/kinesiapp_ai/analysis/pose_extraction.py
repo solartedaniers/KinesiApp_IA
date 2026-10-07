@@ -3,10 +3,10 @@ from pathlib import Path
 
 import numpy as np
 
-from app.analysis.errors import UnreadableVideoError
-from app.analysis.pose_estimator import PoseEstimator
-from app.analysis.pose_series import LANDMARK_COUNT, PoseSeries
-from app.analysis.video_reader import VideoFrameReader
+from kinesiapp_ai.analysis.errors import UnreadableVideoError
+from kinesiapp_ai.analysis.pose_estimator import PoseEstimator
+from kinesiapp_ai.analysis.pose_series import LANDMARK_COUNT, PoseSeries
+from kinesiapp_ai.analysis.video_reader import VideoFrameReader
 
 
 class VideoPoseExtractor:

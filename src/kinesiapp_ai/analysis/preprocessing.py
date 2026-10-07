@@ -1,6 +1,6 @@
 import numpy as np
 
-from app.analysis.pose_series import PoseSeries
+from kinesiapp_ai.analysis.pose_series import PoseSeries
 
 
 class LandmarkSeriesPreprocessor:

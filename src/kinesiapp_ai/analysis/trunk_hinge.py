@@ -1,8 +1,8 @@
 import numpy as np
 
-from app.analysis.angles import AngleSeries
-from app.analysis.movement_windows import DetectionMethod, MovementWindow, MovementWindowDetector
-from app.analysis.pose_series import PoseSeries
+from kinesiapp_ai.analysis.angles import AngleSeries
+from kinesiapp_ai.analysis.movement_windows import DetectionMethod, MovementWindow, MovementWindowDetector
+from kinesiapp_ai.analysis.pose_series import PoseSeries
 
 
 class TrunkHingeDetector:

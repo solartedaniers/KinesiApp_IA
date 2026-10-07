@@ -5,8 +5,8 @@ from typing import Protocol
 
 import numpy as np
 
-from app.analysis.angles import AngleSeries
-from app.analysis.movement_windows import MovementWindow
+from kinesiapp_ai.analysis.angles import AngleSeries
+from kinesiapp_ai.analysis.movement_windows import MovementWindow
 
 
 @dataclass(frozen=True)

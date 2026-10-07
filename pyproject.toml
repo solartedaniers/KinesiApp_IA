@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kinesiapp-ai"
+version = "0.1.0"
+description = "KinesiApp AI: pose analysis with MediaPipe, risk scoring and the Gemini chat prompt"
+requires-python = ">=3.12"
+# Mismas versiones que fijaba backend/requirements.txt: mover el código no debe cambiar ningún resultado
+dependencies = [
+    # opencv-contrib-python es la variante que exige mediapipe; se fija porque el análisis importa cv2 directo
+    "mediapipe==1.0.1",
+    "opencv-contrib-python==5.0.0.93",
+    "numpy==2.5.3",
+    "scipy==1.18.1",
+    "google-genai==2.27.0",
+    # chat/gemini_client.py lo importa directo (errores de red/timeout): no depender de que llegue transitivo
+    "httpx==0.28.1",
+]
+
+[project.optional-dependencies]
+test = ["pytest==8.3.4"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -6,7 +6,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from app.analysis.errors import UnreadableVideoError
+from kinesiapp_ai.analysis.errors import UnreadableVideoError
 
 
 @dataclass(frozen=True)

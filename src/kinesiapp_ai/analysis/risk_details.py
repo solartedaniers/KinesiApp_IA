@@ -3,8 +3,8 @@ from collections import Counter
 from statistics import median
 from typing import Any
 
-from app.analysis.pose_series import PoseSeries
-from app.analysis.risk import AggregatedRisk, PartialScore, RepetitionRisk
+from kinesiapp_ai.analysis.pose_series import PoseSeries
+from kinesiapp_ai.analysis.risk import AggregatedRisk, PartialScore, RepetitionRisk
 
 # Cambia si cambia la forma del JSON: quien lo lea (el chat) sabe qué esperar
 RISK_DETAILS_FORMAT_VERSION = 1
