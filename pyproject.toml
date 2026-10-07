@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kinesiapp-ai"
-version = "0.1.0"
+version = "0.2.0"
 description = "KinesiApp AI: pose analysis with MediaPipe, risk scoring and the Gemini chat prompt"
 requires-python = ">=3.12"
 # Mismas versiones que fijaba backend/requirements.txt: mover el código no debe cambiar ningún resultado
