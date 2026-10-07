@@ -1,13 +1,14 @@
-"""Selección y recorte de la persona principal, con cajas y estimador falsos (sin YOLO ni MediaPipe)."""
+"""Selección, seguimiento y recorte de la persona principal, con cajas y estimador falsos (sin YOLO ni MediaPipe)."""
 from collections.abc import Iterator
 from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
 
 import numpy as np
 
 from kinesiapp_ai.analysis.angles import AngleCalculator, AngleSeries
 from kinesiapp_ai.analysis.person_detection import BoundingBox, select_main_person
-from kinesiapp_ai.analysis.pose_extraction import MainPersonCropper, VideoPoseExtractor
+from kinesiapp_ai.analysis.pose_extraction import CropRegion, MainPersonTracker, VideoPoseExtractor
 from kinesiapp_ai.analysis.pose_series import LANDMARK_COUNT, LEFT_KNEE, RIGHT_KNEE
 from kinesiapp_ai.analysis.video_reader import VideoStream
 from tests.pose_fixtures import add_hip_hinge, standing_points
@@ -15,6 +16,9 @@ from tests.pose_fixtures import add_hip_hinge, standing_points
 WIDTH, HEIGHT = 640, 480
 MARGIN = 0.25
 MIN_RELATIVE_AREA = 0.25
+MIN_IOU = 0.2
+MAX_MISSED_FRAMES = 3
+SMOOTHING = 0.5
 ATHLETE = BoundingBox(240, 100, 400, 460)
 
 
@@ -24,6 +28,16 @@ class _FakeDetector:
 
     def detect(self, frame_bgr: np.ndarray) -> list[BoundingBox]:
         return self._boxes
+
+
+class _ScriptedDetector:
+    """Devuelve las cajas de cada frame en orden, como si fueran de frames consecutivos de un video."""
+
+    def __init__(self, boxes_per_frame: list[list[BoundingBox]]) -> None:
+        self._boxes = iter(boxes_per_frame)
+
+    def detect(self, frame_bgr: np.ndarray) -> list[BoundingBox]:
+        return next(self._boxes)
 
 
 class _FakeReader:
@@ -83,14 +97,28 @@ def _render(points: np.ndarray) -> list[np.ndarray]:
     return frames
 
 
+def _tracker(detector) -> MainPersonTracker:
+    return MainPersonTracker(detector, MARGIN, MIN_RELATIVE_AREA, MIN_IOU, MAX_MISSED_FRAMES, SMOOTHING)
+
+
+def _regions(*boxes_per_frame: list[BoundingBox]) -> list[CropRegion | None]:
+    tracker = _tracker(_ScriptedDetector(list(boxes_per_frame)))
+    frame = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+    return [tracker.region(frame) for _ in boxes_per_frame]
+
+
+def _shifted(box: BoundingBox, dx: float) -> BoundingBox:
+    return BoundingBox(box.x1 + dx, box.y1, box.x2 + dx, box.y2)
+
+
 def _select(*boxes: BoundingBox) -> BoundingBox | None:
     return select_main_person(list(boxes), WIDTH, HEIGHT, MIN_RELATIVE_AREA)
 
 
 def _extract(boxes: list[BoundingBox], frame: np.ndarray) -> tuple[_RecordingEstimator, np.ndarray]:
     estimator = _RecordingEstimator()
-    cropper = MainPersonCropper(_FakeDetector(boxes), MARGIN, MIN_RELATIVE_AREA)
-    series = VideoPoseExtractor(_FakeReader([frame]), lambda: estimator, cropper).extract(Path("video.mp4"))
+    tracker = partial(_tracker, _FakeDetector(boxes))
+    series = VideoPoseExtractor(_FakeReader([frame]), lambda: estimator, tracker).extract(Path("video.mp4"))
     return estimator, series.points[0]
 
 
@@ -138,16 +166,62 @@ def test_angles_of_a_cropped_person_match_the_uncropped_ones():
     # La caja del atleta rodea sus landmarks (x de 0.5 a 0.75, y de 0.4 a 0.9); la del que pasa compite
     detector = _FakeDetector([BoundingBox(300, 180, 500, 440), BoundingBox(20, 100, 180, 420)])
 
-    def angles(cropper: MainPersonCropper | None) -> tuple[AngleSeries, _PixelPoseEstimator]:
+    def angles(tracker_factory) -> tuple[AngleSeries, _PixelPoseEstimator]:
         estimator = _PixelPoseEstimator()
-        series = VideoPoseExtractor(_FakeReader(frames), lambda: estimator, cropper).extract(Path("video.mp4"))
+        series = VideoPoseExtractor(_FakeReader(frames), lambda: estimator, tracker_factory).extract(Path("video.mp4"))
         return AngleCalculator().calculate(series), estimator
 
     full, _ = angles(None)
-    cropped, estimator = angles(MainPersonCropper(detector, MARGIN, MIN_RELATIVE_AREA))
+    cropped, estimator = angles(partial(_tracker, detector))
 
     assert all(shape[:2] != (HEIGHT, WIDTH) for shape in estimator.received_shapes)
     assert np.ptp(full.knee_flexion) > 1 and np.ptp(full.trunk_inclination) > 1
     assert cropped.side == full.side
     np.testing.assert_allclose(cropped.knee_flexion, full.knee_flexion, atol=1e-9)
     np.testing.assert_allclose(cropped.trunk_inclination, full.trunk_inclination, atol=1e-9)
+
+
+PASSERBY = BoundingBox(0, 60, 170, 470)
+
+
+def test_without_competition_the_video_is_never_cropped():
+    assert _regions([ATHLETE], [], [ATHLETE], [ATHLETE]) == [None] * 4
+
+
+def test_the_region_is_held_while_the_detector_loses_the_athlete():
+    regions = _regions([PASSERBY, ATHLETE], [ATHLETE], [], [], [])
+    assert None not in regions
+    assert regions[1] == regions[2] == regions[3] == regions[4]
+
+
+def test_once_cropping_starts_it_never_goes_back_to_the_full_frame():
+    regions = _regions([PASSERBY, ATHLETE], [ATHLETE], [], [], [], [], [], [ATHLETE], [])
+    assert None not in regions
+
+
+def test_the_lock_follows_the_overlapping_box_and_not_a_larger_one():
+    larger_passerby = BoundingBox(0, 0, 230, 480)
+    moved_athlete = _shifted(ATHLETE, 20)
+    regions = _regions([PASSERBY, ATHLETE], [larger_passerby, moved_athlete], [larger_passerby, moved_athlete])
+    assert all(region.x1 > larger_passerby.x2 - 100 for region in regions)
+    assert regions[2].x1 > regions[1].x1 > regions[0].x1
+
+
+def test_the_region_moves_smoothly_toward_the_athlete():
+    regions = _regions([PASSERBY, ATHLETE], [_shifted(ATHLETE, 40)])
+    # Con suavizado 0.5 la región se mueve la mitad de lo que se movió la caja
+    assert regions[1].x1 - regions[0].x1 == 20
+
+
+def test_a_box_that_barely_touches_the_athlete_does_not_steal_the_lock():
+    touching_passerby = BoundingBox(100, 380, 260, 480)
+    assert ATHLETE.iou(touching_passerby) < MIN_IOU
+    regions = _regions([PASSERBY, ATHLETE], [touching_passerby], [touching_passerby])
+    assert regions[0] == regions[1] == regions[2]
+
+
+def test_after_losing_the_athlete_for_good_the_main_person_is_chosen_again():
+    elsewhere = BoundingBox(20, 50, 180, 410)
+    regions = _regions([PASSERBY, ATHLETE], *[[]] * MAX_MISSED_FRAMES, [elsewhere])
+    assert regions[-1] != regions[-2]
+    assert regions[-1].x1 < regions[-2].x1

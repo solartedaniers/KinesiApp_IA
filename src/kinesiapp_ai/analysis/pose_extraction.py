@@ -6,7 +6,12 @@ from pathlib import Path
 import numpy as np
 
 from kinesiapp_ai.analysis.errors import UnreadableVideoError
-from kinesiapp_ai.analysis.person_detection import PersonDetector, select_main_person
+from kinesiapp_ai.analysis.person_detection import (
+    BoundingBox,
+    PersonDetector,
+    most_prominent_person,
+    select_main_person,
+)
 from kinesiapp_ai.analysis.pose_estimator import PoseEstimator
 from kinesiapp_ai.analysis.pose_series import LANDMARK_COUNT, PoseSeries
 from kinesiapp_ai.analysis.video_reader import VideoFrameReader
@@ -33,53 +38,103 @@ class CropRegion:
         return remapped
 
 
-class MainPersonCropper:
-    """Cuando hay más de una persona en el frame, el recorte a la principal con un margen alrededor."""
+class MainPersonTracker:
+    """Sigue a la persona principal a lo largo de un video y da la región que ve el estimador de pose.
 
-    def __init__(self, detector: PersonDetector, margin: float, min_relative_area: float) -> None:
+    Una instancia por video, como el estimador. Mientras nadie compite con el atleta devuelve None y
+    el estimador ve el frame completo, como siempre. La primera vez que otra persona compite se fija
+    a la principal y desde ahí recorta en todos los frames hasta el final, sin volver nunca al frame
+    completo: prender y apagar el recorte desajusta el seguimiento interno de MediaPipe para el resto
+    del video. Ya fijado, sigue a la caja que más se solapa con la del atleta (no a la más grande),
+    sostiene la región cuando el detector lo pierde por desenfoque y la mueve suavizada.
+    """
+
+    def __init__(
+        self,
+        detector: PersonDetector,
+        margin: float,
+        min_relative_area: float,
+        min_iou: float,
+        max_missed_frames: int,
+        smoothing: float,
+    ) -> None:
         self._detector = detector
         self._margin = margin
         self._min_relative_area = min_relative_area
+        self._min_iou = min_iou
+        self._max_missed_frames = max_missed_frames
+        self._smoothing = smoothing
+        self._athlete: BoundingBox | None = None
+        self._smoothed: np.ndarray | None = None
+        self._missed_frames = 0
 
     def region(self, frame: np.ndarray) -> CropRegion | None:
-        """None si no hace falta recortar (una persona o ninguna): se usa el frame completo."""
         height, width = frame.shape[:2]
-        person = select_main_person(self._detector.detect(frame), width, height, self._min_relative_area)
-        if person is None:
-            return None
-        margin_x = (person.x2 - person.x1) * self._margin
-        margin_y = (person.y2 - person.y1) * self._margin
+        boxes = self._detector.detect(frame)
+        if self._athlete is None:
+            person = select_main_person(boxes, width, height, self._min_relative_area)
+            if person is None:
+                return None
+            self._follow(person)
+        else:
+            self._track(boxes, width, height)
+        return self._crop(width, height)
+
+    def _track(self, boxes: list[BoundingBox], width: int, height: int) -> None:
+        match = max(boxes, key=self._athlete.iou, default=None)
+        if match is not None and self._athlete.iou(match) >= self._min_iou:
+            self._follow(match)
+        elif boxes and self._missed_frames >= self._max_missed_frames:
+            # Perdido de verdad (se movió demasiado durante el hueco): se vuelve a elegir al principal
+            self._follow(most_prominent_person(boxes, width, height))
+        else:
+            # Desenfoque u oclusión breve: se sostiene la última región conocida
+            self._missed_frames += 1
+
+    def _follow(self, box: BoundingBox) -> None:
+        self._athlete = box
+        self._missed_frames = 0
+        coordinates = np.array([box.x1, box.y1, box.x2, box.y2])
+        if self._smoothed is None:
+            self._smoothed = coordinates
+        else:
+            self._smoothed = self._smoothing * coordinates + (1 - self._smoothing) * self._smoothed
+
+    def _crop(self, width: int, height: int) -> CropRegion:
+        x1, y1, x2, y2 = self._smoothed
+        margin_x, margin_y = (x2 - x1) * self._margin, (y2 - y1) * self._margin
         return CropRegion(
-            x1=max(0, math.floor(person.x1 - margin_x)),
-            y1=max(0, math.floor(person.y1 - margin_y)),
-            x2=min(width, math.ceil(person.x2 + margin_x)),
-            y2=min(height, math.ceil(person.y2 + margin_y)),
+            x1=max(0, math.floor(x1 - margin_x)),
+            y1=max(0, math.floor(y1 - margin_y)),
+            x2=min(width, math.ceil(x2 + margin_x)),
+            y2=min(height, math.ceil(y2 + margin_y)),
         )
 
 
 class VideoPoseExtractor:
     """Corre el estimador de pose sobre cada frame de un video y arma la serie cruda.
 
-    Con `cropper`, el estimador solo ve a la persona principal cuando hay otras en el frame.
+    Con `tracker_factory`, el estimador solo ve a la persona principal cuando hay otras en el video.
     """
 
     def __init__(
         self,
         frame_reader: VideoFrameReader,
         estimator_factory: Callable[[], PoseEstimator],
-        cropper: MainPersonCropper | None = None,
+        tracker_factory: Callable[[], MainPersonTracker] | None = None,
     ) -> None:
         self._frame_reader = frame_reader
         self._estimator_factory = estimator_factory
-        self._cropper = cropper
+        self._tracker_factory = tracker_factory
 
     def extract(self, video_path: Path) -> PoseSeries:
         frames: list[np.ndarray] = []
         with self._frame_reader.open(video_path) as stream:
             estimator = self._estimator_factory()
+            tracker = self._tracker_factory() if self._tracker_factory else None
             try:
                 for index, frame in enumerate(stream.frames):
-                    pose = self._estimate(estimator, frame, round(index * 1000 / stream.fps))
+                    pose = self._estimate(estimator, tracker, frame, round(index * 1000 / stream.fps))
                     frames.append(pose if pose is not None else np.full((LANDMARK_COUNT, 3), np.nan))
             finally:
                 estimator.close()
@@ -93,8 +148,11 @@ class VideoPoseExtractor:
             aspect_ratio=stream.width / stream.height,
         )
 
-    def _estimate(self, estimator: PoseEstimator, frame: np.ndarray, timestamp_ms: int) -> np.ndarray | None:
-        region = self._cropper.region(frame) if self._cropper else None
+    @staticmethod
+    def _estimate(
+        estimator: PoseEstimator, tracker: MainPersonTracker | None, frame: np.ndarray, timestamp_ms: int
+    ) -> np.ndarray | None:
+        region = tracker.region(frame) if tracker else None
         if region is None:
             return estimator.estimate(frame, timestamp_ms)
         pose = estimator.estimate(region.apply(frame), timestamp_ms)
