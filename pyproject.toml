@@ -14,6 +14,9 @@ dependencies = [
     "opencv-contrib-python==5.0.0.93",
     "numpy==2.5.3",
     "scipy==1.18.1",
+    # Corre el detector de personas YOLO (yolo11n.onnx, lo descarga el Dockerfile del backend fijado
+    # por checksum). Sin el paquete ultralytics: arrastra torch y descarga/instala cosas al ejecutar
+    "onnxruntime==1.30.0",
     "google-genai==2.27.0",
     # chat/gemini_client.py lo importa directo (errores de red/timeout): no depender de que llegue transitivo
     "httpx==0.28.1",
