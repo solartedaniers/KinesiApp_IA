@@ -20,6 +20,24 @@ class BoundingBox:
     def area(self) -> float:
         return (self.x2 - self.x1) * (self.y2 - self.y1)
 
+    def iou(self, other: "BoundingBox") -> float:
+        """Intersección sobre unión: 1 si son la misma caja, 0 si no se tocan."""
+        width = max(0.0, min(self.x2, other.x2) - max(self.x1, other.x1))
+        height = max(0.0, min(self.y2, other.y2) - max(self.y1, other.y1))
+        intersection = width * height
+        return intersection / (self.area + other.area - intersection)
+
+
+def most_prominent_person(boxes: list[BoundingBox], frame_width: int, frame_height: int) -> BoundingBox:
+    """La más grande y más centrada (área × cercanía al centro del frame): la que se graba a propósito."""
+    half_diagonal = np.hypot(frame_width, frame_height) / 2
+
+    def score(box: BoundingBox) -> float:
+        offset = np.hypot((box.x1 + box.x2 - frame_width) / 2, (box.y1 + box.y2 - frame_height) / 2)
+        return box.area * (1 - offset / half_diagonal)
+
+    return max(boxes, key=score)
+
 
 def select_main_person(
     boxes: list[BoundingBox], frame_width: int, frame_height: int, min_relative_area: float
@@ -27,8 +45,7 @@ def select_main_person(
     """La persona que se está grabando cuando otra compite con ella; None si no hace falta elegir.
 
     Solo compiten las cajas de al menos `min_relative_area` del área de la más grande: un reflejo en
-    un espejo o alguien lejos al fondo no es otra persona que pueda confundir al modelo de pose. Entre
-    las que compiten gana la más grande y más centrada (área × cercanía al centro del frame).
+    un espejo o alguien lejos al fondo no es otra persona que pueda confundir al modelo de pose.
     """
     if not boxes:
         return None
@@ -36,13 +53,7 @@ def select_main_person(
     contenders = [box for box in boxes if box.area >= min_relative_area * largest_area]
     if len(contenders) < 2:
         return None
-    half_diagonal = np.hypot(frame_width, frame_height) / 2
-
-    def score(box: BoundingBox) -> float:
-        offset = np.hypot((box.x1 + box.x2 - frame_width) / 2, (box.y1 + box.y2 - frame_height) / 2)
-        return box.area * (1 - offset / half_diagonal)
-
-    return max(contenders, key=score)
+    return most_prominent_person(contenders, frame_width, frame_height)
 
 
 class PersonDetector(Protocol):
