@@ -4,3 +4,10 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+# Graphify (mapa del proyecto, no necesita versionarse)
+graphify-out/
+graph.json
+
+# Claude Code (config local)
+.claude/
+.claudeignore
