@@ -1,13 +1,30 @@
 import json
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 
 from kinesiapp_ai.analysis.risk_details import RISK_DETAILS_FORMAT_VERSION
 from kinesiapp_ai.chat.llm import LlmRequest, LlmTurn
 from kinesiapp_ai.chat.pattern_catalog import RiskPatternCatalog
 from kinesiapp_ai.chat.system_prompt import OPENING_REQUEST, SYSTEM_PROMPT_TEMPLATE
-from app.models.chat import ChatMessage, ChatRole
-from app.models.jump_analysis import JumpAnalysis
-from app.models.user import UserRole
+
+HistoryRole = Literal["user", "assistant"]
+ASSISTANT_ROLE: HistoryRole = "assistant"
+
+
+@dataclass(frozen=True)
+class AnalysisPromptInput:
+    """Lo que el chat necesita de un análisis procesado, sin saber cómo se guarda."""
+
+    movement: str
+    risk_score: float
+    dominant_risk_pattern: str | None
+    risk_details: dict[str, Any] | None
+
+
+@dataclass(frozen=True)
+class HistoryMessage:
+    role: HistoryRole
+    content: str
 
 
 class JumpAnalysisPromptBuilder:
@@ -32,7 +49,7 @@ class JumpAnalysisPromptBuilder:
         self._max_history_messages = max_history_messages
 
     def build(
-        self, analysis: JumpAnalysis, audience: UserRole, history: list[ChatMessage], user_message: str
+        self, analysis: AnalysisPromptInput, audience: str, history: list[HistoryMessage], user_message: str
     ) -> LlmRequest:
         data = self.analysis_data(analysis, audience)
         system_instruction = SYSTEM_PROMPT_TEMPLATE.replace(
@@ -43,16 +60,16 @@ class JumpAnalysisPromptBuilder:
             turns=[*self._history_turns(history), LlmTurn(role="user", text=user_message)],
         )
 
-    def build_opening(self, analysis: JumpAnalysis, audience: UserRole) -> LlmRequest:
+    def build_opening(self, analysis: AnalysisPromptInput, audience: str) -> LlmRequest:
         """Primera explicación del resultado: mismos datos y mismo system prompt que el chat."""
         return self.build(analysis, audience, [], OPENING_REQUEST)
 
-    def analysis_data(self, analysis: JumpAnalysis, audience: UserRole) -> dict[str, Any]:
+    def analysis_data(self, analysis: AnalysisPromptInput, audience: str) -> dict[str, Any]:
         details = analysis.risk_details
         has_details = isinstance(details, dict) and details.get("format_version") == RISK_DETAILS_FORMAT_VERSION
         data: dict[str, Any] = {
-            "audience": audience.value,
-            "movement": analysis.movement_type.value,
+            "audience": audience,
+            "movement": analysis.movement,
             "risk_score": analysis.risk_score,
             "risk_level": self._risk_level(analysis.risk_score),
             "details_available": has_details,
@@ -71,7 +88,7 @@ class JumpAnalysisPromptBuilder:
             return "moderate"
         return "low"
 
-    def _reduced(self, analysis: JumpAnalysis) -> dict[str, Any]:
+    def _reduced(self, analysis: AnalysisPromptInput) -> dict[str, Any]:
         text = self._catalog.pattern(analysis.dominant_risk_pattern)
         if text is None:
             # Sin patrón conocido: con score 0 es "ningún patrón"; con score > 0 es un análisis
@@ -147,25 +164,25 @@ class JumpAnalysisPromptBuilder:
             for rep in selected
         ]
 
-    def _history_turns(self, history: list[ChatMessage]) -> list[LlmTurn]:
+    def _history_turns(self, history: list[HistoryMessage]) -> list[LlmTurn]:
         # Un mensaje de usuario que quedó sin respuesta (falló el proveedor) no se reenvía
         answered = [
             message
             for index, message in enumerate(history)
-            if message.role == ChatRole.ASSISTANT
-            or (index + 1 < len(history) and history[index + 1].role == ChatRole.ASSISTANT)
+            if message.role == ASSISTANT_ROLE
+            or (index + 1 < len(history) and history[index + 1].role == ASSISTANT_ROLE)
         ]
         recent = answered[-self._max_history_messages:] if self._max_history_messages else []
         # El historial debe empezar con un turno de usuario. Si empieza con la explicación inicial
         # (primer mensaje del hilo), se antepone el pedido que la generó para no perderla; si es una
         # respuesta cuya pregunta quedó fuera de la ventana, se descarta como antes
         opening: list[LlmTurn] = []
-        if recent and recent[0].role == ChatRole.ASSISTANT:
+        if recent and recent[0].role == ASSISTANT_ROLE:
             if recent[0] is history[0]:
                 opening = [LlmTurn(role="user", text=OPENING_REQUEST)]
             else:
                 recent = recent[1:]
         return opening + [
-            LlmTurn(role="model" if message.role == ChatRole.ASSISTANT else "user", text=message.content)
+            LlmTurn(role="model" if message.role == ASSISTANT_ROLE else "user", text=message.content)
             for message in recent
         ]
