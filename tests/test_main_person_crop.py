@@ -225,3 +225,14 @@ def test_after_losing_the_athlete_for_good_the_main_person_is_chosen_again():
     regions = _regions([PASSERBY, ATHLETE], *[[]] * MAX_MISSED_FRAMES, [elsewhere])
     assert regions[-1] != regions[-2]
     assert regions[-1].x1 < regions[-2].x1
+
+
+def test_someone_else_overlapping_the_held_region_does_not_steal_the_lock():
+    # Mismo tamaño que el atleta y a su izquierda; mientras el detector no ve al atleta, se le
+    # sigue acercando: se solapa con la región sostenida más que el umbral, pero sigue siendo él
+    passerby = BoundingBox(150, 100, 310, 460)
+    approaching = _shifted(passerby, 10)
+    assert ATHLETE.iou(approaching) >= MIN_IOU
+    assert approaching.iou(passerby) > approaching.iou(ATHLETE)
+    regions = _regions([passerby, ATHLETE], [approaching], [_shifted(approaching, 10)])
+    assert regions[0] == regions[1] == regions[2]

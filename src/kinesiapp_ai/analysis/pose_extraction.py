@@ -46,7 +46,9 @@ class MainPersonTracker:
     a la principal y desde ahí recorta en todos los frames hasta el final, sin volver nunca al frame
     completo: prender y apagar el recorte desajusta el seguimiento interno de MediaPipe para el resto
     del video. Ya fijado, sigue a la caja que más se solapa con la del atleta (no a la más grande),
-    sostiene la región cuando el detector lo pierde por desenfoque y la mueve suavizada.
+    sostiene la región cuando el detector lo pierde por desenfoque y la mueve suavizada. También
+    sigue a las demás personas de un frame al siguiente: una caja que continúa a otra persona nunca
+    pasa a ser del atleta, aunque se solape con la región que se sostiene mientras no se lo ve.
     """
 
     def __init__(
@@ -67,6 +69,8 @@ class MainPersonTracker:
         self._athlete: BoundingBox | None = None
         self._smoothed: np.ndarray | None = None
         self._missed_frames = 0
+        # Las demás personas en el frame anterior: todas las cajas que no fueron del atleta
+        self._others: list[BoundingBox] = []
 
     def region(self, frame: np.ndarray) -> CropRegion | None:
         height, width = frame.shape[:2]
@@ -78,18 +82,26 @@ class MainPersonTracker:
             self._follow(person)
         else:
             self._track(boxes, width, height)
+        self._others = [box for box in boxes if box is not self._athlete]
         return self._crop(width, height)
 
     def _track(self, boxes: list[BoundingBox], width: int, height: int) -> None:
-        match = max(boxes, key=self._athlete.iou, default=None)
+        candidates = [box for box in boxes if not self._continues_someone_else(box)]
+        match = max(candidates, key=self._athlete.iou, default=None)
         if match is not None and self._athlete.iou(match) >= self._min_iou:
             self._follow(match)
-        elif boxes and self._missed_frames >= self._max_missed_frames:
+        elif candidates and self._missed_frames >= self._max_missed_frames:
             # Perdido de verdad (se movió demasiado durante el hueco): se vuelve a elegir al principal
-            self._follow(most_prominent_person(boxes, width, height))
+            self._follow(most_prominent_person(candidates, width, height))
         else:
             # Desenfoque u oclusión breve: se sostiene la última región conocida
             self._missed_frames += 1
+
+    def _continues_someone_else(self, box: BoundingBox) -> bool:
+        """La caja es otra persona del frame anterior: se solapa con ella más que con el atleta."""
+        return any(
+            box.iou(other) >= self._min_iou and box.iou(other) > box.iou(self._athlete) for other in self._others
+        )
 
     def _follow(self, box: BoundingBox) -> None:
         self._athlete = box
