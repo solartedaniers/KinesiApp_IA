@@ -20,10 +20,20 @@ dependencies = [
     "google-genai==2.27.0",
     # chat/gemini_client.py lo importa directo (errores de red/timeout): no depender de que llegue transitivo
     "httpx==0.28.1",
+    # Servidor gRPC asíncrono, con las mismas versiones que el backend para hablar igual el protocolo
+    "grpcio==1.84.0",
+    # Devuelvo google.rpc.Status con ErrorInfo en los errores, como el backend
+    "grpcio-status==1.84.0",
+    # La salud la expongo con el estándar grpc.health.v1
+    "grpcio-health-checking==1.84.0",
+    "protobuf==7.36.2",
+    "pydantic-settings==2.7.1",
 ]
 
 [project.optional-dependencies]
 test = ["pytest==8.3.4"]
+# Solo para generar el código de los contratos (scripts/generate_grpc.py); no va en la imagen final
+codegen = ["grpcio-tools==1.84.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
