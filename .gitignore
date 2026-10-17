@@ -6,6 +6,8 @@ __pycache__/
 # Código de los contratos: lo genero en cada build con scripts/generate_grpc.py
 generated/
 .env
+# Modelos: los descarga el Dockerfile fijados por checksum
+models/
 venv/
 # Graphify (mapa del proyecto, no necesita versionarse)
 graphify-out/
