@@ -7,10 +7,9 @@ from kinesiapp_ai.analysis.pose_series import PoseSeries
 
 
 class SquatBottomDetector:
-    """Encuentra el fondo de cada repetición como un pico de flexión de rodilla.
+    """Encuentro el fondo de cada repetición como un pico de flexión de rodilla.
 
-    ponytail: detecta por la rodilla, como el spike; la recomendación de REPORT.md es pasar a la
-    trayectoria de la cadera, que no depende de un umbral de flexión.
+    Las sentadillas sin pico de rodilla (bisagra de cadera) las cubre TrunkHingeDetector como respaldo.
     """
 
     def __init__(
