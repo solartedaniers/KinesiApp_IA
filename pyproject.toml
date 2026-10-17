@@ -30,3 +30,5 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Pruebo contra el código fuente sin instalar el paquete, y con el código generado de los contratos
+pythonpath = ["src", "generated"]
