@@ -28,8 +28,8 @@ class GeminiLlmClient:
         )
         self._model_name = model_name
         self._max_output_tokens = max_output_tokens
-        # Con el razonamiento por defecto, el modelo gastaba casi todo max_output_tokens pensando: la respuesta
-        # salía truncada y el primer texto tardaba varias veces más
+        # Fijo el razonamiento porque con el del modelo se gastaba casi todo max_output_tokens pensando: la respuesta
+        # me llegaba truncada y el primer texto tardaba varias veces más
         self._thinking = types.ThinkingConfig(thinking_level=thinking_level) if thinking_level else None
 
     async def stream_reply(self, request: LlmRequest) -> AsyncIterator[str]:
