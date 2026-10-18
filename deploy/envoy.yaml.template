@@ -1,7 +1,8 @@
 # Pongo Envoy delante porque Render solo acepta HTTP/1.1 desde internet y en el plan free la IA no recibe
 # tráfico privado: recibo gRPC-Web del backend y lo traduzco a gRPC nativo hacia grpcio en el mismo
-# contenedor. El secreto compartido lo valida grpcio, no Envoy. Los marcadores __ASÍ__ los reemplazo en
-# entrypoint.sh.
+# contenedor. El gRPC nativo por HTTP/2 (el ingress de Container Apps) lo dejo pasar tal cual, porque el filtro
+# solo traduce gRPC-Web: así un mismo puerto sirve a los dos transportes del backend. El secreto compartido lo
+# valida grpcio, no Envoy. Los marcadores __ASÍ__ los reemplazo en entrypoint.sh.
 static_resources:
   listeners:
     - name: grpc_web
