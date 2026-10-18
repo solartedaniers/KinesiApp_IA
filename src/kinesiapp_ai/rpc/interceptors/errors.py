@@ -40,8 +40,9 @@ class ErrorInterceptor(CallScopeInterceptor):
             if reason is None:
                 logger.error("Expected error %s has no reason in %s", type(error).__name__, method)
                 await context.abort(grpc.StatusCode.INTERNAL, "Internal error")
+            # El detalle (rutas temporales, proveedor del LLM) solo va al log; al cliente le basta el motivo
             logger.info("Call rejected in %s: %s", method, error)
-            await self._abort(context, reason, str(error))
+            await self._abort(context, reason, reason_name(reason))
         except ValidationError as error:
             violations = [
                 error_details_pb2.BadRequest.FieldViolation(

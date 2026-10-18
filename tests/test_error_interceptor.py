@@ -100,3 +100,13 @@ def test_unknown_errors_are_internal_and_leak_nothing(error: Exception) -> None:
     _, rpc_error = asyncio.run(_call(error))
 
     assert (rpc_error.code(), rpc_error.details()) == (grpc.StatusCode.INTERNAL, "Internal error")
+
+
+@pytest.mark.parametrize(
+    "error",
+    [VideoTooLongError("Video /tmp/kinesiapp-video-abc lasts more than 40.0 s"), LlmUnavailableError("Gemini failed: APIError 429")],
+)
+def test_expected_errors_keep_their_internal_detail_out_of_the_message(error: Exception) -> None:
+    _, rpc_error = asyncio.run(_call(error))
+
+    assert "/tmp" not in rpc_error.details() and "Gemini" not in rpc_error.details()
