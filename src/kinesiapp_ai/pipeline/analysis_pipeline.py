@@ -5,6 +5,7 @@ from typing import Protocol
 
 from kinesiapp.common.v1.errors_pb2 import ErrorReason
 
+from kinesiapp_ai.analysis.frame_sampler import FrameSampler
 from kinesiapp_ai.analysis.movement_analyzer import AnalysisStage, MovementAnalysis, MovementAnalyzer
 from kinesiapp_ai.analysis.movement_strategy import Movement, MovementStrategy
 from kinesiapp_ai.analysis.video_duration import VideoDurationGuard
@@ -45,6 +46,7 @@ class MovementAnalysisPipeline:
         source: VideoSource,
         duration_guard: VideoDurationGuard,
         runner: ThreadedAnalysisRunner,
+        sampler: FrameSampler,
     ) -> None:
         self._slots = slots
         self._warmer = warmer
@@ -53,6 +55,7 @@ class MovementAnalysisPipeline:
         self._source = source
         self._duration_guard = duration_guard
         self._runner = runner
+        self._sampler = sampler
 
     async def analyze(self, video_url: str, movement: Movement) -> AsyncIterator[Progress | MovementAnalysis]:
         strategy = self._strategies[movement]
@@ -65,14 +68,16 @@ class MovementAnalysisPipeline:
             with temporary_video_path() as video_path:
                 await self._source.download(video_url, video_path)
                 metadata = await asyncio.to_thread(self._duration_guard.check, video_path)
+                # Reporto el total de frames que de verdad analizo, que con un fps máximo es menor que el del archivo
+                frames_total = self._sampler.sampled_count(metadata.frame_count, metadata.fps)
                 async for event in self._runner.run(self._analyzers.build(models), video_path, strategy):
                     # Solo la extracción de pose lleva frames, como dice el contrato
                     if isinstance(event, StageReached) and event.stage is AnalysisStage.EXTRACTING_POSE:
-                        yield Progress(event.stage, frames_total=metadata.frame_count)
+                        yield Progress(event.stage, frames_total=frames_total)
                     elif isinstance(event, StageReached):
                         yield Progress(event.stage)
                     elif isinstance(event, FramesProcessed):
-                        yield Progress(AnalysisStage.EXTRACTING_POSE, event.processed, metadata.frame_count)
+                        yield Progress(AnalysisStage.EXTRACTING_POSE, event.processed, frames_total)
                     else:
                         yield event
 

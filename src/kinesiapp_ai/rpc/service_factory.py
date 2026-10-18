@@ -12,6 +12,7 @@ from kinesiapp.ai.v1 import (
     movement_analysis_pb2_grpc,
 )
 
+from kinesiapp_ai.analysis.frame_sampler import FrameSampler
 from kinesiapp_ai.analysis.risk_level import RiskLevelClassifier
 from kinesiapp_ai.analysis.video_duration import VideoDurationGuard
 from kinesiapp_ai.chat.analysis_assistant import AnalysisAssistant
@@ -62,6 +63,7 @@ class AiServiceFactory:
             source=HttpVideoSource(self._http_client, AllowedHostPolicy(download.ALLOWED_HOSTS), download),
             duration_guard=VideoDurationGuard(analysis.MAX_VIDEO_DURATION_SECONDS),
             runner=ThreadedAnalysisRunner(analysis.PROGRESS_EVERY_FRAMES),
+            sampler=FrameSampler(analysis.MAX_FPS),
         )
         messages = AnalysisMessages(
             RiskLevelClassifier(risk.RISK_LEVEL_MODERATE, risk.RISK_LEVEL_HIGH),

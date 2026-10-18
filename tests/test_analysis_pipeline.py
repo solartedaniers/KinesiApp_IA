@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from kinesiapp.common.v1.errors_pb2 import ErrorReason
 
+from kinesiapp_ai.analysis.frame_sampler import FrameSampler
 from kinesiapp_ai.analysis.errors import VideoTooLongError
 from kinesiapp_ai.analysis.movement_analyzer import AnalysisStage
 from kinesiapp_ai.analysis.movement_strategy import Movement
@@ -64,7 +65,11 @@ class _Builder:
 
 
 def _pipeline(
-    source: _FileSource, analyzer: _FakeAnalyzer, slots: AnalysisSlots | None = None, load=lambda: "models"
+    source: _FileSource,
+    analyzer: _FakeAnalyzer,
+    slots: AnalysisSlots | None = None,
+    load=lambda: "models",
+    sampler: FrameSampler | None = None,
 ) -> MovementAnalysisPipeline:
     return MovementAnalysisPipeline(
         slots=slots or AnalysisSlots(1),
@@ -74,6 +79,7 @@ def _pipeline(
         source=source,
         duration_guard=VideoDurationGuard(max_duration_seconds=2.0),
         runner=ThreadedAnalysisRunner(progress_every_frames=2),
+        sampler=sampler or FrameSampler(None),
     )
 
 
@@ -100,6 +106,16 @@ def test_the_stream_reports_each_stage_with_frames_and_ends_with_the_result(shor
         RESULT,
     ]
     assert not source.destinations[0].exists()
+
+
+def test_with_a_frame_rate_cap_the_total_counts_only_the_sampled_frames(short_video: Path) -> None:
+    async def main():
+        pipeline = _pipeline(_FileSource(short_video), _FakeAnalyzer(frames=2), sampler=FrameSampler(max_fps=5))
+        return [event async for event in pipeline.analyze(URL, Movement.JUMP)]
+
+    totals = {event.frames_total for event in asyncio.run(main()) if isinstance(event, Progress) and event.frames_total}
+
+    assert totals == {2}
 
 
 def test_a_second_analysis_while_the_first_runs_is_rejected_at_once(short_video: Path) -> None:

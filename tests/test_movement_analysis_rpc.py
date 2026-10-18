@@ -14,6 +14,7 @@ from kinesiapp.ai.v1 import movement_analysis_pb2 as analysis_pb2
 from kinesiapp.ai.v1 import movement_analysis_pb2_grpc as analysis_pb2_grpc
 from kinesiapp.common.v1 import movement_pb2
 
+from kinesiapp_ai.analysis.frame_sampler import FrameSampler
 from kinesiapp_ai.analysis.angles import AngleCalculator
 from kinesiapp_ai.analysis.movement_analyzer import MovementAnalyzer
 from kinesiapp_ai.analysis.pose_extraction import VideoPoseExtractor
@@ -86,6 +87,7 @@ class _World:
             source=HttpVideoSource(self.client, AllowedHostPolicy(settings.ALLOWED_HOSTS), settings),
             duration_guard=VideoDurationGuard(MAX_SECONDS),
             runner=ThreadedAnalysisRunner(progress_every_frames=30),
+            sampler=FrameSampler(None),
         )
         servicer = MovementAnalysisServicer(pipeline, AnalysisMessages(RiskLevelClassifier(0.33, 0.66), "pose-v1", "risk-v1"))
         self.registration = partial(analysis_pb2_grpc.add_MovementAnalysisServiceServicer_to_server, servicer)
