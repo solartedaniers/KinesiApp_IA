@@ -94,10 +94,10 @@ class MainPersonTracker:
         if match is not None and self._athlete.iou(match) >= self._min_iou:
             self._follow(match)
         elif candidates and self._missed_frames >= self._max_missed_frames:
-            # Perdido de verdad (se movió demasiado durante el hueco): se vuelve a elegir al principal
+            # Lo perdí de verdad (se movió demasiado durante el hueco): vuelvo a elegir al principal
             self._follow(most_prominent_person(candidates, width, height))
         else:
-            # Desenfoque u oclusión breve: se sostiene la última región conocida
+            # Desenfoque u oclusión breve: sostengo la última región conocida
             self._missed_frames += 1
 
     def _continues_someone_else(self, box: BoundingBox) -> bool:

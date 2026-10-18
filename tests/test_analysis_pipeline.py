@@ -128,7 +128,7 @@ def test_a_disallowed_url_is_rejected_before_taking_a_slot_or_loading_models(sho
             await anext(pipeline.analyze("https://evil.test/a.mp4", Movement.JUMP))
         return raised.value.reason
 
-    # Aunque el cupo esté lleno responde BAD_REQUEST y no AI_BUSY: la URL se valida primero
+    # Aunque el cupo esté lleno respondo BAD_REQUEST y no AI_BUSY: valido la URL primero
     assert asyncio.run(main()) == ErrorReason.ERROR_REASON_BAD_REQUEST
     assert loads == []
 
