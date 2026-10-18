@@ -67,4 +67,6 @@ async def serve(settings: AiSettings) -> None:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+    # Subo el nivel de httpx porque en INFO registra la URL completa, y la de un video lleva su firma
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     asyncio.run(serve(AiSettings.from_environment()))
