@@ -59,7 +59,7 @@ def test_a_jump_goes_through_every_stage_and_scores_its_landing() -> None:
 
     analysis, observer = _analyze(points, Movement.JUMP)
 
-    assert observer.stages == list(AnalysisStage)
+    assert observer.stages == [AnalysisStage.EXTRACTING_POSE, AnalysisStage.DETECTING_REPETITIONS, AnalysisStage.SCORING_RISK]
     assert observer.frames == list(range(1, 91))
     assert [rep.window.detected_by for rep in analysis.risk.repetitions] == [DetectionMethod.LANDING]
     assert set(analysis.risk.pattern_scores) <= set(RiskSettings().RISK_JUMP_PATTERNS)

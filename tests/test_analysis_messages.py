@@ -5,7 +5,7 @@ import math
 import numpy as np
 from kinesiapp.common.v1 import movement_pb2
 
-from kinesiapp_ai.analysis.movement_analyzer import MovementAnalysis
+from kinesiapp_ai.analysis.movement_analyzer import AnalysisStage, MovementAnalysis
 from kinesiapp_ai.analysis.movement_windows import DetectionMethod, MovementWindow
 from kinesiapp_ai.analysis.risk import AggregatedRisk, PartialScore, RepetitionRisk
 from kinesiapp_ai.analysis.risk_level import RiskLevelClassifier
@@ -64,6 +64,12 @@ def test_unmeasured_values_stay_absent_instead_of_zero() -> None:
     assert not signal_score.HasField("score") and not signal_score.HasField("measured_degrees")
     assert not assessment.HasField("dominant_pattern")
     assert assessment.risk_level == movement_pb2.RISK_LEVEL_LOW
+
+
+def test_every_stage_has_its_contract_value() -> None:
+    assert {AnalysisMessages.stage(stage) for stage in AnalysisStage} == set(movement_pb2.AnalysisStage.values()) - {
+        movement_pb2.ANALYSIS_STAGE_UNSPECIFIED
+    }
 
 
 def test_progress_messages_carry_stage_and_frames() -> None:

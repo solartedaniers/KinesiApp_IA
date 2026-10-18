@@ -10,6 +10,8 @@ from kinesiapp_ai.analysis.risk import AggregatedRisk, KneeFlexionRiskStrategy, 
 from kinesiapp_ai.analysis.risk_level import RiskLevel, RiskLevelClassifier
 
 _STAGES = {
+    AnalysisStage.QUEUED: movement_pb2.ANALYSIS_STAGE_QUEUED,
+    AnalysisStage.DOWNLOADING_VIDEO: movement_pb2.ANALYSIS_STAGE_DOWNLOADING_VIDEO,
     AnalysisStage.EXTRACTING_POSE: movement_pb2.ANALYSIS_STAGE_EXTRACTING_POSE,
     AnalysisStage.DETECTING_REPETITIONS: movement_pb2.ANALYSIS_STAGE_DETECTING_REPETITIONS,
     AnalysisStage.SCORING_RISK: movement_pb2.ANALYSIS_STAGE_SCORING_RISK,

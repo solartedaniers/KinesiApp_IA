@@ -13,6 +13,8 @@ from kinesiapp_ai.analysis.risk import AggregatedRisk
 
 
 class AnalysisStage(str, enum.Enum):
+    QUEUED = "queued"
+    DOWNLOADING_VIDEO = "downloading_video"
     EXTRACTING_POSE = "extracting_pose"
     DETECTING_REPETITIONS = "detecting_repetitions"
     SCORING_RISK = "scoring_risk"
