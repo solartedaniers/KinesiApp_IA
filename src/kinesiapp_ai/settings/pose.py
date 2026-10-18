@@ -30,6 +30,8 @@ class PoseSettings(EnvSettings):
     # Corro YOLO uno de cada tantos frames y entre medias sostengo la región: es lo más caro del análisis.
     # Con 1 detecto en todos los frames
     PERSON_DETECTOR_INTERVAL_FRAMES: int = Field(default=1, ge=1)
+    # Hilos de onnxruntime para YOLO. Sin valor, uno por núcleo visible
+    PERSON_DETECTOR_THREADS: int | None = Field(default=None, ge=1)
     PERSON_TRACK_SMOOTHING: float = Field(default=0.5, gt=0, le=1)
     LANDMARK_VISIBILITY_THRESHOLD: float = Field(default=0.1, ge=0, le=1)
     LANDMARK_SMOOTHING_WINDOW_FRAMES: int = Field(default=3, ge=1)

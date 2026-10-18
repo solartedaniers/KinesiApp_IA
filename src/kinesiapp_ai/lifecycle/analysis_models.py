@@ -20,7 +20,9 @@ class AnalysisModelLoader:
 
     def __call__(self) -> AnalysisModels:
         settings = self._settings
-        detector = YoloPersonDetector(settings.PERSON_DETECTOR_MODEL_PATH, settings.PERSON_DETECTOR_MIN_CONFIDENCE)
+        detector = YoloPersonDetector(
+            settings.PERSON_DETECTOR_MODEL_PATH, settings.PERSON_DETECTOR_MIN_CONFIDENCE, settings.PERSON_DETECTOR_THREADS
+        )
         # Abro y cierro un estimador: así cargo la librería nativa y el modelo, y falla aquí si falta el archivo
         MediaPipePoseEstimator(settings.POSE_MODEL_PATH, settings.POSE_MIN_DETECTION_CONFIDENCE).close()
         return AnalysisModels(person_detector=detector)

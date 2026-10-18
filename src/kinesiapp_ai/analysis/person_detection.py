@@ -74,8 +74,13 @@ class YoloPersonDetector:
     _PAD_VALUE = 114
     _NMS_IOU_THRESHOLD = 0.45
 
-    def __init__(self, model_path: Path, min_confidence: float) -> None:
-        self._session = onnxruntime.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
+    def __init__(self, model_path: Path, min_confidence: float, threads: int | None = None) -> None:
+        options = onnxruntime.SessionOptions()
+        # Sin valor, onnxruntime abre un hilo por núcleo visible; con una cuota de CPU chica esos hilos
+        # se estorban entre sí, así que dejo fijarlos
+        if threads is not None:
+            options.intra_op_num_threads = threads
+        self._session = onnxruntime.InferenceSession(str(model_path), options, providers=["CPUExecutionProvider"])
         self._input_name = self._session.get_inputs()[0].name
         self._min_confidence = min_confidence
 
