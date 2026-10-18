@@ -16,7 +16,9 @@ from kinesiapp_ai.analysis.risk_level import RiskLevelClassifier
 from kinesiapp_ai.analysis.video_duration import VideoDurationGuard
 from kinesiapp_ai.chat.analysis_assistant import AnalysisAssistant
 from kinesiapp_ai.chat.assessment_details import RiskAssessmentDetails
+from kinesiapp_ai.chat.fallback_llm import FallbackLlmClient
 from kinesiapp_ai.chat.gemini_client import GeminiLlmClient
+from kinesiapp_ai.chat.llm import LlmClient
 from kinesiapp_ai.chat.pattern_catalog import RiskPatternCatalog
 from kinesiapp_ai.chat.prompt_builder import MovementAnalysisPromptBuilder
 from kinesiapp_ai.lifecycle.analysis_models import AnalysisModelLoader, AnalysisModels
@@ -32,6 +34,7 @@ from kinesiapp_ai.rpc.assistant_servicer import AssistantServicer
 from kinesiapp_ai.rpc.lifecycle_servicer import AiLifecycleServicer
 from kinesiapp_ai.rpc.movement_analysis_servicer import MovementAnalysisServicer
 from kinesiapp_ai.settings.ai import AiSettings
+from kinesiapp_ai.settings.assistant import AssistantSettings
 from kinesiapp_ai.video_source.http_video_source import HttpVideoSource, build_http_client
 from kinesiapp_ai.video_source.url_policy import AllowedHostPolicy
 
@@ -78,14 +81,20 @@ class AiServiceFactory:
             max_repetitions=chat.CHAT_PROMPT_MAX_REPETITIONS,
             max_history_messages=chat.CHAT_HISTORY_MAX_MESSAGES,
         )
-        llm = GeminiLlmClient(
-            api_key=chat.GEMINI_API_KEY.get_secret_value(),
-            model_name=chat.GEMINI_MODEL,
-            timeout_seconds=chat.GEMINI_TIMEOUT_SECONDS,
-            max_output_tokens=chat.GEMINI_MAX_OUTPUT_TOKENS,
-        )
+        llm: LlmClient = AiServiceFactory._gemini(chat, chat.GEMINI_MODEL)
+        if chat.GEMINI_FALLBACK_MODEL:
+            llm = FallbackLlmClient(llm, AiServiceFactory._gemini(chat, chat.GEMINI_FALLBACK_MODEL))
         return AssistantServicer(
             AnalysisAssistant(prompts, llm), AssistantMessages(RiskAssessmentDetails(), chat.CHAT_QUESTION_MAX_CHARS)
+        )
+
+    @staticmethod
+    def _gemini(chat: AssistantSettings, model_name: str) -> GeminiLlmClient:
+        return GeminiLlmClient(
+            api_key=chat.GEMINI_API_KEY.get_secret_value(),
+            model_name=model_name,
+            timeout_seconds=chat.GEMINI_TIMEOUT_SECONDS,
+            max_output_tokens=chat.GEMINI_MAX_OUTPUT_TOKENS,
         )
 
     def registrations(self) -> list[ServicerRegistration]:
