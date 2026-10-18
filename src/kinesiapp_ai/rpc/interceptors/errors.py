@@ -9,8 +9,9 @@ from grpc_status import rpc_status
 from kinesiapp.common.v1.errors_pb2 import ErrorReason
 from pydantic import ValidationError
 
+from kinesiapp_ai.analysis.errors import VideoAnalysisError
 from kinesiapp_ai.rpc.domain_error import DomainError
-from kinesiapp_ai.rpc.error_status import ERROR_DOMAIN, STATUS_BY_REASON, reason_name
+from kinesiapp_ai.rpc.error_status import ERROR_DOMAIN, REASON_BY_ANALYSIS_ERROR, STATUS_BY_REASON, reason_name
 from kinesiapp_ai.rpc.interceptors.call_scope import CallScopeInterceptor
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,13 @@ class ErrorInterceptor(CallScopeInterceptor):
                 logger.error("Reason %s has no status in %s", reason_name(error.reason), method)
                 await context.abort(grpc.StatusCode.INTERNAL, "Internal error")
             await self._abort(context, error.reason, error.message)
+        except VideoAnalysisError as error:
+            reason = REASON_BY_ANALYSIS_ERROR.get(type(error))
+            if reason is None:
+                logger.error("Analysis error %s has no reason in %s", type(error).__name__, method)
+                await context.abort(grpc.StatusCode.INTERNAL, "Internal error")
+            logger.info("Analysis rejected in %s: %s", method, error)
+            await self._abort(context, reason, str(error))
         except ValidationError as error:
             violations = [
                 error_details_pb2.BadRequest.FieldViolation(
