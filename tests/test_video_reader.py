@@ -6,6 +6,7 @@ import pytest
 
 from kinesiapp_ai.analysis.errors import UnreadableVideoError
 from kinesiapp_ai.analysis.frame_downscaler import FrameDownscaler
+from kinesiapp_ai.analysis.frame_sampler import FrameSampler
 from kinesiapp_ai.analysis.video_reader import VideoFrameReader
 from tests.video_fixtures import write_video
 
@@ -32,3 +33,17 @@ def test_a_file_that_is_not_a_video_is_unreadable(tmp_path: Path) -> None:
 
     with pytest.raises(UnreadableVideoError), VideoFrameReader().open(garbage):
         pass
+
+
+def test_a_frame_rate_cap_keeps_one_frame_in_each_stride(tmp_path: Path) -> None:
+    video = write_video(tmp_path / "fast.mp4", frame_count=9, fps=30)
+
+    with VideoFrameReader(sampler=FrameSampler(max_fps=10)).open(video) as stream:
+        assert (stream.fps, len(list(stream.frames))) == (10, 3)
+
+
+def test_a_cap_above_the_source_rate_keeps_every_frame(tmp_path: Path) -> None:
+    video = write_video(tmp_path / "slow.mp4", frame_count=5, fps=10)
+
+    with VideoFrameReader(sampler=FrameSampler(max_fps=15)).open(video) as stream:
+        assert (stream.fps, len(list(stream.frames))) == (10, 5)
