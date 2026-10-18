@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from kinesiapp_ai.settings.analysis import AnalysisSettings
+from kinesiapp_ai.settings.assistant import AssistantSettings
 from kinesiapp_ai.settings.phases import MovementPhaseSettings
 from kinesiapp_ai.settings.pose import PoseSettings
 from kinesiapp_ai.settings.risk import RiskSettings
@@ -20,6 +21,7 @@ class AiSettings:
     phases: MovementPhaseSettings
     risk: RiskSettings
     download: VideoDownloadSettings
+    assistant: AssistantSettings
 
     @classmethod
     def from_environment(cls) -> "AiSettings":
@@ -32,4 +34,5 @@ class AiSettings:
             phases=MovementPhaseSettings(),
             risk=RiskSettings(),
             download=VideoDownloadSettings(),
+            assistant=AssistantSettings(),
         )

@@ -11,6 +11,7 @@ from kinesiapp_ai.rpc.server import build_interceptors
 from kinesiapp_ai.rpc.service_factory import ServicerRegistration
 from kinesiapp_ai.settings.ai import AiSettings
 from kinesiapp_ai.settings.analysis import AnalysisSettings
+from kinesiapp_ai.settings.assistant import AssistantSettings
 from kinesiapp_ai.settings.phases import MovementPhaseSettings
 from kinesiapp_ai.settings.pose import PoseSettings
 from kinesiapp_ai.settings.risk import RiskSettings
@@ -32,6 +33,7 @@ def isolated_settings() -> AiSettings:
         phases=MovementPhaseSettings(),
         risk=RiskSettings(),
         download=VideoDownloadSettings(ALLOWED_HOSTS=["storage.neon.test"]),
+        assistant=AssistantSettings(GEMINI_API_KEY="test-key"),
     )
 
 
