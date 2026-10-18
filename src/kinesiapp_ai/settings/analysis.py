@@ -18,5 +18,8 @@ class AnalysisSettings(EnvSettings):
     # Si lo defino, reduzco cada frame hasta que su lado mayor mida esto antes de analizarlo. Sin valor
     # analizo a la resolución original
     MAX_FRAME_SIDE_PX: int | None = Field(default=None, ge=160)
+    # Si lo defino, salto frames con paso entero para no analizar más de estos por segundo. Sin valor
+    # analizo todos los frames del video
+    MAX_FPS: float | None = Field(default=None, gt=0)
     # Reporto el progreso cada tantos frames para no inundar el stream con un mensaje por frame
     PROGRESS_EVERY_FRAMES: int = Field(default=10, ge=1)
