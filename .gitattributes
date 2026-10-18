@@ -1,0 +1,2 @@
+# Los scripts corren dentro de un contenedor Linux: con CRLF bash no los ejecuta
+*.sh text eol=lf
