@@ -30,6 +30,10 @@ class _FileSource:
         self.video, self.error = video, error
         self.destinations: list[Path] = []
 
+    def validate(self, url: str) -> None:
+        if not url.startswith("https://storage.neon.test/"):
+            raise DomainError(ErrorReason.ERROR_REASON_BAD_REQUEST, "Video host is not allowed")
+
     async def download(self, url: str, destination: Path) -> None:
         self.destinations.append(destination)
         shutil.copyfile(self.video, destination)
@@ -112,6 +116,21 @@ def test_a_second_analysis_while_the_first_runs_is_rejected_at_once(short_video:
         return raised.value.reason, slots.in_use
 
     assert asyncio.run(main()) == (ErrorReason.ERROR_REASON_AI_BUSY, 0)
+
+
+def test_a_disallowed_url_is_rejected_before_taking_a_slot_or_loading_models(short_video: Path) -> None:
+    slots = AnalysisSlots(1)
+    loads: list[int] = []
+
+    async def main():
+        pipeline = _pipeline(_FileSource(short_video), _FakeAnalyzer(frames=4), slots, load=lambda: loads.append(1))
+        with slots.reserve(), pytest.raises(DomainError) as raised:
+            await anext(pipeline.analyze("https://evil.test/a.mp4", Movement.JUMP))
+        return raised.value.reason
+
+    # Aunque el cupo esté lleno responde BAD_REQUEST y no AI_BUSY: la URL se valida primero
+    assert asyncio.run(main()) == ErrorReason.ERROR_REASON_BAD_REQUEST
+    assert loads == []
 
 
 def test_a_failed_download_removes_the_file_and_frees_the_slot(short_video: Path) -> None:

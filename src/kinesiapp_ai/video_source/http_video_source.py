@@ -12,6 +12,10 @@ from kinesiapp_ai.video_source.url_policy import AllowedHostPolicy
 
 
 class VideoSource(Protocol):
+    def validate(self, url: str) -> None:
+        """Rechazo la URL sin hacer ninguna petición si no se puede descargar de ella."""
+        ...
+
     async def download(self, url: str, destination: Path) -> None: ...
 
 
@@ -22,6 +26,9 @@ class HttpVideoSource:
         self._client = client
         self._policy = policy
         self._settings = settings
+
+    def validate(self, url: str) -> None:
+        self._policy.check(url)
 
     async def download(self, url: str, destination: Path) -> None:
         try:

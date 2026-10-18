@@ -56,6 +56,8 @@ class MovementAnalysisPipeline:
 
     async def analyze(self, video_url: str, movement: Movement) -> AsyncIterator[Progress | MovementAnalysis]:
         strategy = self._strategies[movement]
+        # Valido la URL antes de reservar el cupo: una URL rechazada no debe esperar a los modelos
+        self._source.validate(video_url)
         with self._slots.reserve():
             yield Progress(AnalysisStage.QUEUED)
             models = await self._models()
