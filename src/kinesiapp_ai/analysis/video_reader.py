@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 
 from kinesiapp_ai.analysis.errors import UnreadableVideoError
+from kinesiapp_ai.analysis.frame_downscaler import FrameDownscaler
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,9 @@ class VideoStream:
 
 class VideoFrameReader:
     """Decodifica un video a frames BGR, en orden, sin guardarlos todos en memoria."""
+
+    def __init__(self, downscaler: FrameDownscaler | None = None) -> None:
+        self._downscaler = downscaler or FrameDownscaler(None)
 
     @contextmanager
     def open(self, video_path: Path) -> Iterator[VideoStream]:
@@ -38,10 +42,9 @@ class VideoFrameReader:
         finally:
             capture.release()
 
-    @staticmethod
-    def _frames(capture: cv2.VideoCapture) -> Iterator[np.ndarray]:
+    def _frames(self, capture: cv2.VideoCapture) -> Iterator[np.ndarray]:
         while True:
             ok, frame = capture.read()
             if not ok:
                 return
-            yield frame
+            yield self._downscaler.apply(frame)
