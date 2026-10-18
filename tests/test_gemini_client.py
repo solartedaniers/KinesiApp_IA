@@ -91,3 +91,10 @@ def test_a_reply_without_text_is_llm_unavailable(monkeypatch: pytest.MonkeyPatch
 
     with pytest.raises(LlmUnavailableError):
         _collect(client, [])
+
+
+def test_the_failure_names_the_provider_status_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, _ = _client(monkeypatch, [], errors.ClientError(429, {"error": {"message": "quota"}}), fail_at_start=True)
+
+    with pytest.raises(LlmUnavailableError, match="ClientError 429"):
+        _collect(client, [])

@@ -39,7 +39,9 @@ class GeminiLlmClient:
                     produced = True
                     yield chunk.text
         except (errors.APIError, httpx.HTTPError, TimeoutError) as error:
-            raise LlmUnavailableError(f"Gemini failed: {type(error).__name__}") from error
+            # Registro el código HTTP para distinguir cuota (429), modelo inexistente (404) o saturación (503)
+            code = getattr(error, "code", None)
+            raise LlmUnavailableError(f"Gemini failed: {type(error).__name__} {code or ''}".strip()) from error
         # Sin texto la respuesta vino bloqueada por seguridad o cortada antes de generar nada
         if not produced:
             raise LlmUnavailableError("Empty response from Gemini")
