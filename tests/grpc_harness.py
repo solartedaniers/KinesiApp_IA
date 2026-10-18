@@ -9,9 +9,30 @@ from grpc_status import rpc_status
 
 from kinesiapp_ai.rpc.server import build_interceptors
 from kinesiapp_ai.rpc.service_factory import ServicerRegistration
+from kinesiapp_ai.settings.ai import AiSettings
+from kinesiapp_ai.settings.analysis import AnalysisSettings
+from kinesiapp_ai.settings.phases import MovementPhaseSettings
+from kinesiapp_ai.settings.pose import PoseSettings
+from kinesiapp_ai.settings.risk import RiskSettings
+from kinesiapp_ai.settings.server import GrpcServerSettings
+from kinesiapp_ai.settings.service_auth import ServiceAuthSettings
+from kinesiapp_ai.settings.video_download import VideoDownloadSettings
 
 TOKEN = "s" * 32
 WITH_TOKEN = (("authorization", f"Bearer {TOKEN}"),)
+
+
+def isolated_settings() -> AiSettings:
+    # Paso el secreto y los hosts a mano para que las pruebas no dependan del .env de quien las corre
+    return AiSettings(
+        server=GrpcServerSettings(),
+        auth=ServiceAuthSettings(AI_SERVICE_TOKEN=TOKEN),
+        pose=PoseSettings(),
+        analysis=AnalysisSettings(),
+        phases=MovementPhaseSettings(),
+        risk=RiskSettings(),
+        download=VideoDownloadSettings(ALLOWED_HOSTS=["storage.neon.test"]),
+    )
 
 
 @asynccontextmanager

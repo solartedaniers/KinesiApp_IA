@@ -13,9 +13,8 @@ from kinesiapp_ai.rpc.interceptors.errors import ErrorInterceptor
 from kinesiapp_ai.rpc.interceptors.logging import LoggingInterceptor
 from kinesiapp_ai.rpc.interceptors.service_token import ServiceTokenInterceptor
 from kinesiapp_ai.rpc.service_factory import AiServiceFactory, ServicerRegistration
-from kinesiapp_ai.settings.pose import PoseSettings
+from kinesiapp_ai.settings.ai import AiSettings
 from kinesiapp_ai.settings.server import GrpcServerSettings
-from kinesiapp_ai.settings.service_auth import ServiceAuthSettings
 
 logger = logging.getLogger(__name__)
 
@@ -42,14 +41,16 @@ async def mark_serving(health_servicer: health.aio.HealthServicer, service_names
         await health_servicer.set(name, health_pb2.HealthCheckResponse.SERVING)
 
 
-async def serve(settings: GrpcServerSettings, auth: ServiceAuthSettings, pose: PoseSettings) -> None:
-    factory = AiServiceFactory(pose)
-    server = build_server(settings, build_interceptors(auth.AI_SERVICE_TOKEN.get_secret_value()), factory.registrations())
+async def serve(settings: AiSettings) -> None:
+    factory = AiServiceFactory(settings)
+    server = build_server(
+        settings.server, build_interceptors(settings.auth.AI_SERVICE_TOKEN.get_secret_value()), factory.registrations()
+    )
     await server.start()
     await mark_serving(factory.health, factory.service_names())
     # Empiezo a cargar los modelos al arrancar: en el plan free el contenedor despierta con la primera llamada
     factory.warmer.warm_up()
-    logger.info("AI gRPC server listening on %s:%s", settings.HOST, settings.PORT)
+    logger.info("AI gRPC server listening on %s:%s", settings.server.HOST, settings.server.PORT)
 
     stopping = asyncio.Event()
     # Escucho SIGTERM porque así detiene Render el contenedor; en Windows no existe y basta Ctrl+C
@@ -59,10 +60,11 @@ async def serve(settings: GrpcServerSettings, auth: ServiceAuthSettings, pose: P
         await stopping.wait()
     finally:
         await factory.health.enter_graceful_shutdown()
-        await server.stop(settings.SHUTDOWN_GRACE_SECONDS)
+        await server.stop(settings.server.SHUTDOWN_GRACE_SECONDS)
+        await factory.aclose()
         logger.info("AI gRPC server stopped")
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    asyncio.run(serve(GrpcServerSettings(), ServiceAuthSettings(), PoseSettings()))
+    asyncio.run(serve(AiSettings.from_environment()))

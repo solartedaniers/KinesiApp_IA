@@ -14,8 +14,7 @@ from kinesiapp_ai.lifecycle.model_warmer import ModelWarmer
 from kinesiapp_ai.rpc.lifecycle_servicer import AiLifecycleServicer
 from kinesiapp_ai.rpc.server import mark_serving
 from kinesiapp_ai.rpc.service_factory import AiServiceFactory
-from kinesiapp_ai.settings.pose import PoseSettings
-from tests.grpc_harness import TOKEN, WITH_TOKEN, error_reason, serving
+from tests.grpc_harness import TOKEN, WITH_TOKEN, error_reason, serving, isolated_settings
 
 
 def _gated_loader() -> tuple[Callable[[], str], threading.Event]:
@@ -30,7 +29,7 @@ def _gated_loader() -> tuple[Callable[[], str], threading.Event]:
 
 def test_health_reports_serving_only_with_the_service_token() -> None:
     async def main():
-        factory = AiServiceFactory(PoseSettings())
+        factory = AiServiceFactory(isolated_settings())
         async with serving(factory.registrations()) as channel:
             await mark_serving(factory.health, factory.service_names())
             stub = health_pb2_grpc.HealthStub(channel)
@@ -53,7 +52,7 @@ def test_health_reports_serving_only_with_the_service_token() -> None:
 
 def test_wrong_or_malformed_tokens_are_rejected() -> None:
     async def main():
-        factory = AiServiceFactory(PoseSettings())
+        factory = AiServiceFactory(isolated_settings())
         async with serving(factory.registrations()) as channel:
             stub = lifecycle_pb2_grpc.AiLifecycleServiceStub(channel)
             errors = []
