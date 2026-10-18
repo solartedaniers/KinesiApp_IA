@@ -1,3 +1,5 @@
+import logging
+import time
 from collections.abc import AsyncIterator
 
 import httpx
@@ -5,6 +7,8 @@ from google import genai
 from google.genai import errors, types
 
 from kinesiapp_ai.chat.llm import LlmOverloadedError, LlmRequest, LlmUnavailableError
+
+logger = logging.getLogger(__name__)
 
 _OVERLOADED_STATUS = 503
 
@@ -30,6 +34,9 @@ class GeminiLlmClient:
 
     async def stream_reply(self, request: LlmRequest) -> AsyncIterator[str]:
         produced = False
+        started = time.perf_counter()
+        first_text_ms = None
+        usage = None
         try:
             stream = await self._client.aio.models.generate_content_stream(
                 model=self._model_name,
@@ -43,14 +50,26 @@ class GeminiLlmClient:
                 ),
             )
             async for chunk in stream:
+                usage = chunk.usage_metadata or usage
                 if chunk.text:
                     produced = True
+                    if first_text_ms is None:
+                        first_text_ms = (time.perf_counter() - started) * 1000
                     yield chunk.text
         except (errors.APIError, httpx.HTTPError, TimeoutError) as error:
             # Registro el código HTTP para distinguir cuota (429), modelo inexistente (404) o saturación (503)
             code = getattr(error, "code", None)
             failure = LlmOverloadedError if code == _OVERLOADED_STATUS else LlmUnavailableError
             raise failure(f"Gemini failed: {type(error).__name__} {code or ''}".strip()) from error
+        # Lo registro porque sin esto los logs no decían cuánto del chat era espera de Gemini ni cuánto razonó
+        logger.info(
+            "Gemini %s: first text %s ms, total %.0f ms, thoughts %s tokens, output %s tokens",
+            self._model_name,
+            f"{first_text_ms:.0f}" if first_text_ms is not None else "-",
+            (time.perf_counter() - started) * 1000,
+            getattr(usage, "thoughts_token_count", None),
+            getattr(usage, "candidates_token_count", None),
+        )
         # Sin texto la respuesta vino bloqueada por seguridad o cortada antes de generar nada
         if not produced:
             raise LlmUnavailableError("Empty response from Gemini")
