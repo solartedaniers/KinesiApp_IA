@@ -9,6 +9,7 @@ from grpc_status import rpc_status
 from kinesiapp.common.v1.errors_pb2 import ErrorReason
 
 from kinesiapp_ai.analysis.errors import NoMovementDetectedError, UnreadableVideoError, VideoAnalysisError, VideoTooLongError
+from kinesiapp_ai.chat.llm import LlmUnavailableError
 from kinesiapp_ai.rpc.domain_error import DomainError
 from kinesiapp_ai.rpc.interceptors.errors import ErrorInterceptor
 
@@ -71,6 +72,7 @@ def _reason(error: grpc.aio.AioRpcError) -> str | None:
         (UnreadableVideoError("broken"), grpc.StatusCode.INVALID_ARGUMENT, "VIDEO_UNREADABLE"),
         (VideoTooLongError("too long"), grpc.StatusCode.INVALID_ARGUMENT, "VIDEO_TOO_LONG"),
         (NoMovementDetectedError("still"), grpc.StatusCode.FAILED_PRECONDITION, "NO_MOVEMENT_DETECTED"),
+        (LlmUnavailableError("quota"), grpc.StatusCode.UNAVAILABLE, "ASSISTANT_UNAVAILABLE"),
         (DomainError(ErrorReason.ERROR_REASON_AI_BUSY, "busy"), grpc.StatusCode.RESOURCE_EXHAUSTED, "AI_BUSY"),
         (DomainError(ErrorReason.ERROR_REASON_STORAGE_UNAVAILABLE, "down"), grpc.StatusCode.UNAVAILABLE, "STORAGE_UNAVAILABLE"),
         (DomainError(ErrorReason.ERROR_REASON_VIDEO_TOO_LARGE, "big"), grpc.StatusCode.INVALID_ARGUMENT, "VIDEO_TOO_LARGE"),

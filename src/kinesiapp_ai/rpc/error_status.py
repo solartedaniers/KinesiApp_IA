@@ -1,7 +1,8 @@
 from grpc import StatusCode
 from kinesiapp.common.v1.errors_pb2 import ErrorReason
 
-from kinesiapp_ai.analysis.errors import NoMovementDetectedError, UnreadableVideoError, VideoAnalysisError, VideoTooLongError
+from kinesiapp_ai.analysis.errors import NoMovementDetectedError, UnreadableVideoError, VideoTooLongError
+from kinesiapp_ai.chat.llm import LlmUnavailableError
 
 ERROR_DOMAIN = "kinesiapp"
 _REASON_PREFIX = "ERROR_REASON_"
@@ -21,11 +22,13 @@ STATUS_BY_REASON: dict[ErrorReason.ValueType, StatusCode] = {
     ErrorReason.ERROR_REASON_ASSISTANT_UNAVAILABLE: StatusCode.UNAVAILABLE,
 }
 
-# Traduzco aquí los fallos esperados del análisis para que el dominio no dependa de los motivos del contrato
-REASON_BY_ANALYSIS_ERROR: dict[type[VideoAnalysisError], ErrorReason.ValueType] = {
+# Traduzco aquí los fallos esperados del análisis y del asistente para que el dominio no dependa de los
+# motivos del contrato
+REASON_BY_EXPECTED_ERROR: dict[type[Exception], ErrorReason.ValueType] = {
     UnreadableVideoError: ErrorReason.ERROR_REASON_VIDEO_UNREADABLE,
     VideoTooLongError: ErrorReason.ERROR_REASON_VIDEO_TOO_LONG,
     NoMovementDetectedError: ErrorReason.ERROR_REASON_NO_MOVEMENT_DETECTED,
+    LlmUnavailableError: ErrorReason.ERROR_REASON_ASSISTANT_UNAVAILABLE,
 }
 
 
