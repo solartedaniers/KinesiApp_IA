@@ -2,6 +2,7 @@ from functools import partial
 
 from kinesiapp_ai.analysis.angles import AngleCalculator
 from kinesiapp_ai.analysis.frame_downscaler import FrameDownscaler
+from kinesiapp_ai.analysis.frame_sampler import FrameSampler
 from kinesiapp_ai.analysis.movement_analyzer import MovementAnalyzer
 from kinesiapp_ai.analysis.pose_estimator import MediaPipePoseEstimator
 from kinesiapp_ai.analysis.pose_extraction import MainPersonTracker, VideoPoseExtractor
@@ -23,7 +24,7 @@ class MovementAnalyzerFactory:
         pose = self._pose
         return MovementAnalyzer(
             pose_extractor=VideoPoseExtractor(
-                VideoFrameReader(FrameDownscaler(self._analysis.MAX_FRAME_SIDE_PX)),
+                VideoFrameReader(FrameDownscaler(self._analysis.MAX_FRAME_SIDE_PX), FrameSampler(self._analysis.MAX_FPS)),
                 partial(MediaPipePoseEstimator, pose.POSE_MODEL_PATH, pose.POSE_MIN_DETECTION_CONFIDENCE),
                 # Comparto el detector entre videos; el seguimiento es uno por video, como el estimador
                 partial(
@@ -34,6 +35,7 @@ class MovementAnalyzerFactory:
                     min_iou=pose.PERSON_TRACK_MIN_IOU,
                     max_missed_frames=pose.PERSON_TRACK_MAX_MISSED_FRAMES,
                     smoothing=pose.PERSON_TRACK_SMOOTHING,
+                    detection_interval=pose.PERSON_DETECTOR_INTERVAL_FRAMES,
                 ),
                 max_duration_ms=round(self._analysis.MAX_VIDEO_DURATION_SECONDS * 1000),
             ),
