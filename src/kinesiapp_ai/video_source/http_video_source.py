@@ -61,13 +61,18 @@ class HttpVideoSource:
 
     async def _save(self, response: httpx.Response, destination: Path) -> None:
         received = 0
-        with destination.open("wb") as file:
+        # Abro, escribo y cierro en un hilo: en la corrutina, cada escritura al disco frenaba el event loop
+        # y con él las demás llamadas que atiende la IA
+        file = await asyncio.to_thread(destination.open, "wb")
+        try:
             async for chunk in response.aiter_bytes(self._settings.CHUNK_BYTES):
                 received += len(chunk)
                 # Cuento lo recibido aunque el servidor haya declarado un tamaño: el encabezado puede mentir
                 if received > self._settings.MAX_BYTES:
                     raise _too_large()
-                file.write(chunk)
+                await asyncio.to_thread(file.write, chunk)
+        finally:
+            await asyncio.to_thread(file.close)
 
 
 def build_http_client(settings: VideoDownloadSettings) -> httpx.AsyncClient:

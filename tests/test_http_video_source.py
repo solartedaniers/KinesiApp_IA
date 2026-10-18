@@ -1,6 +1,7 @@
 """Pruebo la descarga del video contra un transporte falso: límites, redirecciones y fallos del bucket."""
 
 import asyncio
+import threading
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 
@@ -143,3 +144,36 @@ def test_a_download_slower_than_the_total_timeout_is_cut(tmp_path: Path) -> None
 
     assert reason == ErrorReason.ERROR_REASON_STORAGE_UNAVAILABLE
     assert body.sent < 5
+
+
+def test_the_disk_writes_run_outside_the_event_loop_thread(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    loop_thread, writers = threading.get_ident(), []
+    real_open = Path.open
+
+    class _RecordingFile:
+        def __init__(self, file) -> None:
+            self._file = file
+
+        def write(self, chunk: bytes) -> int:
+            writers.append(threading.get_ident())
+            return self._file.write(chunk)
+
+        def close(self) -> None:
+            writers.append(threading.get_ident())
+            self._file.close()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc) -> None:
+            self.close()
+
+    monkeypatch.setattr(Path, "open", lambda self, *args, **kwargs: _RecordingFile(real_open(self, *args, **kwargs)))
+    destination = tmp_path / "v.mp4"
+
+    _download(lambda request: httpx.Response(200, stream=_CountingBody(chunks=10)), destination)
+
+    # Sigo contando el tope por partes: con 100 bytes justos no corto, y todo llega al disco
+    with real_open(destination, "rb") as saved:
+        assert saved.read() == b"v" * 100
+    assert writers and loop_thread not in writers
