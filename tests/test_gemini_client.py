@@ -7,7 +7,7 @@ import pytest
 from google.genai import errors
 
 from kinesiapp_ai.chat.gemini_client import GeminiLlmClient
-from kinesiapp_ai.chat.llm import LlmRequest, LlmTurn, LlmUnavailableError
+from kinesiapp_ai.chat.llm import LlmOverloadedError, LlmRequest, LlmTurn, LlmUnavailableError
 
 REQUEST = LlmRequest(system_instruction="instrucciones", turns=[LlmTurn(role="user", text="hola")])
 
@@ -98,3 +98,14 @@ def test_the_failure_names_the_provider_status_code(monkeypatch: pytest.MonkeyPa
 
     with pytest.raises(LlmUnavailableError, match="ClientError 429"):
         _collect(client, [])
+
+
+def test_a_503_is_reported_as_overloaded_and_other_failures_are_not(monkeypatch: pytest.MonkeyPatch) -> None:
+    overloaded, _ = _client(monkeypatch, [], errors.ServerError(503, {"error": {"message": "high demand"}}), fail_at_start=True)
+    with pytest.raises(LlmOverloadedError):
+        _collect(overloaded, [])
+
+    quota, _ = _client(monkeypatch, [], errors.ClientError(429, {"error": {"message": "quota"}}), fail_at_start=True)
+    with pytest.raises(LlmUnavailableError) as raised:
+        _collect(quota, [])
+    assert not isinstance(raised.value, LlmOverloadedError)

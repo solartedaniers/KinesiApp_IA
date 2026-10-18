@@ -4,7 +4,9 @@ import httpx
 from google import genai
 from google.genai import errors, types
 
-from kinesiapp_ai.chat.llm import LlmRequest, LlmUnavailableError
+from kinesiapp_ai.chat.llm import LlmOverloadedError, LlmRequest, LlmUnavailableError
+
+_OVERLOADED_STATUS = 503
 
 
 class GeminiLlmClient:
@@ -41,7 +43,8 @@ class GeminiLlmClient:
         except (errors.APIError, httpx.HTTPError, TimeoutError) as error:
             # Registro el código HTTP para distinguir cuota (429), modelo inexistente (404) o saturación (503)
             code = getattr(error, "code", None)
-            raise LlmUnavailableError(f"Gemini failed: {type(error).__name__} {code or ''}".strip()) from error
+            failure = LlmOverloadedError if code == _OVERLOADED_STATUS else LlmUnavailableError
+            raise failure(f"Gemini failed: {type(error).__name__} {code or ''}".strip()) from error
         # Sin texto la respuesta vino bloqueada por seguridad o cortada antes de generar nada
         if not produced:
             raise LlmUnavailableError("Empty response from Gemini")

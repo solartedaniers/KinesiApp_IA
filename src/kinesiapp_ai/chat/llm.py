@@ -7,6 +7,10 @@ class LlmUnavailableError(Exception):
     """El proveedor no pudo responder: timeout, cuota agotada, red o respuesta bloqueada."""
 
 
+class LlmOverloadedError(LlmUnavailableError):
+    """El modelo está saturado (503): es temporal y otro modelo sí podría responder."""
+
+
 @dataclass(frozen=True)
 class LlmTurn:
     role: Literal["user", "model"]
