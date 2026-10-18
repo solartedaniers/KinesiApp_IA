@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from kinesiapp_ai.analysis.errors import UnreadableVideoError
+from kinesiapp_ai.analysis.errors import UnreadableVideoError, VideoTooLongError
 from kinesiapp_ai.analysis.person_detection import (
     BoundingBox,
     PersonDetector,
@@ -15,6 +15,9 @@ from kinesiapp_ai.analysis.person_detection import (
 from kinesiapp_ai.analysis.pose_estimator import PoseEstimator
 from kinesiapp_ai.analysis.pose_series import LANDMARK_COUNT, PoseSeries
 from kinesiapp_ai.analysis.video_reader import VideoFrameReader
+
+# Observer: recibe cuántos frames llevo procesados. Si lanza una excepción, la extracción se detiene
+FrameObserver = Callable[[int], None]
 
 
 @dataclass(frozen=True)
@@ -134,20 +137,28 @@ class VideoPoseExtractor:
         frame_reader: VideoFrameReader,
         estimator_factory: Callable[[], PoseEstimator],
         tracker_factory: Callable[[], MainPersonTracker] | None = None,
+        max_duration_ms: int | None = None,
     ) -> None:
         self._frame_reader = frame_reader
         self._estimator_factory = estimator_factory
         self._tracker_factory = tracker_factory
+        self._max_duration_ms = max_duration_ms
 
-    def extract(self, video_path: Path) -> PoseSeries:
+    def extract(self, video_path: Path, on_frame: FrameObserver | None = None) -> PoseSeries:
         frames: list[np.ndarray] = []
         with self._frame_reader.open(video_path) as stream:
             estimator = self._estimator_factory()
             tracker = self._tracker_factory() if self._tracker_factory else None
             try:
                 for index, frame in enumerate(stream.frames):
-                    pose = self._estimate(estimator, tracker, frame, round(index * 1000 / stream.fps))
+                    timestamp_ms = round(index * 1000 / stream.fps)
+                    # Vuelvo a medir la duración con los frames reales: un archivo puede declarar menos de lo que trae
+                    if self._max_duration_ms is not None and timestamp_ms >= self._max_duration_ms:
+                        raise VideoTooLongError(f"Video {video_path} lasts more than {self._max_duration_ms} ms")
+                    pose = self._estimate(estimator, tracker, frame, timestamp_ms)
                     frames.append(pose if pose is not None else np.full((LANDMARK_COUNT, 3), np.nan))
+                    if on_frame is not None:
+                        on_frame(index + 1)
             finally:
                 estimator.close()
         if not frames:
