@@ -236,3 +236,39 @@ def test_someone_else_overlapping_the_held_region_does_not_steal_the_lock():
     assert approaching.iou(passerby) > approaching.iou(ATHLETE)
     regions = _regions([passerby, ATHLETE], [approaching], [_shifted(approaching, 10)])
     assert regions[0] == regions[1] == regions[2]
+
+
+class _CountingDetector(_FakeDetector):
+    def __init__(self, boxes: list[BoundingBox]) -> None:
+        super().__init__(boxes)
+        self.calls = 0
+
+    def detect(self, frame_bgr: np.ndarray) -> list[BoundingBox]:
+        self.calls += 1
+        return super().detect(frame_bgr)
+
+
+def test_with_an_interval_the_detector_runs_once_per_interval_and_the_region_is_held():
+    detector = _CountingDetector([ATHLETE, BoundingBox(0, 100, 160, 460)])
+    tracker = MainPersonTracker(
+        detector, MARGIN, MIN_RELATIVE_AREA, MIN_IOU, MAX_MISSED_FRAMES, SMOOTHING, detection_interval=3
+    )
+    frame = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+
+    regions = [tracker.region(frame) for _ in range(7)]
+
+    assert detector.calls == 3
+    assert regions[0] is not None and all(region == regions[0] for region in regions)
+
+
+def test_missed_detections_count_video_frames_so_the_athlete_is_reacquired_on_time():
+    moved = BoundingBox(420, 100, 580, 460)
+    detector = _ScriptedDetector([[ATHLETE, BoundingBox(0, 100, 160, 460)], [], [moved]])
+    tracker = MainPersonTracker(detector, MARGIN, MIN_RELATIVE_AREA, MIN_IOU, MAX_MISSED_FRAMES, SMOOTHING, detection_interval=3)
+    frame = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+    first = tracker.region(frame)
+
+    regions = [tracker.region(frame) for _ in range(6)]
+
+    # Una sola detección fallida ya son 3 frames sin verlo: con MAX_MISSED_FRAMES=3 lo vuelvo a buscar
+    assert regions[4] == first and regions[5].x1 > first.x1

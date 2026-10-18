@@ -62,8 +62,12 @@ class MainPersonTracker:
         min_iou: float,
         max_missed_frames: int,
         smoothing: float,
+        detection_interval: int = 1,
     ) -> None:
         self._detector = detector
+        self._detection_interval = detection_interval
+        self._frames_seen = 0
+        self._last_region: CropRegion | None = None
         self._margin = margin
         self._min_relative_area = min_relative_area
         self._min_iou = min_iou
@@ -76,6 +80,15 @@ class MainPersonTracker:
         self._others: list[BoundingBox] = []
 
     def region(self, frame: np.ndarray) -> CropRegion | None:
+        position = self._frames_seen
+        self._frames_seen += 1
+        # Entre detecciones sostengo la última región: YOLO es lo que más tiempo se lleva del análisis
+        if position % self._detection_interval:
+            return self._last_region
+        self._last_region = self._detect(frame)
+        return self._last_region
+
+    def _detect(self, frame: np.ndarray) -> CropRegion | None:
         height, width = frame.shape[:2]
         boxes = self._detector.detect(frame)
         if self._athlete is None:
@@ -97,8 +110,9 @@ class MainPersonTracker:
             # Lo perdí de verdad (se movió demasiado durante el hueco): vuelvo a elegir al principal
             self._follow(most_prominent_person(candidates, width, height))
         else:
-            # Desenfoque u oclusión breve: sostengo la última región conocida
-            self._missed_frames += 1
+            # Desenfoque u oclusión breve: sostengo la última región conocida. Cuento en frames del video,
+            # no en detecciones, para que el máximo signifique lo mismo con cualquier intervalo
+            self._missed_frames += self._detection_interval
 
     def _continues_someone_else(self, box: BoundingBox) -> bool:
         """La caja es otra persona del frame anterior: se solapa con ella más que con el atleta."""
