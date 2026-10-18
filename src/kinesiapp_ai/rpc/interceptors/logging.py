@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator
@@ -16,9 +17,14 @@ class LoggingInterceptor(CallScopeInterceptor):
     @asynccontextmanager
     async def scope(self, method: str, context: grpc.aio.ServicerContext) -> AsyncIterator[None]:
         started = time.perf_counter()
+        cancelled = False
         try:
             yield
+        except asyncio.CancelledError:
+            # Cuando el cliente o un proxy cortan la llamada, code() queda vacío y la registraba como OK
+            cancelled = True
+            raise
         finally:
-            code = context.code() or grpc.StatusCode.OK
+            code = grpc.StatusCode.CANCELLED if cancelled else context.code() or grpc.StatusCode.OK
             elapsed_ms = (time.perf_counter() - started) * 1000
             logger.info("%s %s %.1fms", method, code.name, elapsed_ms)
