@@ -2,46 +2,20 @@
 
 import asyncio
 import threading
-from collections.abc import AsyncIterator, Callable, Sequence
-from contextlib import asynccontextmanager
+from collections.abc import Callable
 from functools import partial
 
 import grpc
-from google.rpc import error_details_pb2
 from grpc_health.v1 import health_pb2, health_pb2_grpc
-from grpc_status import rpc_status
 from kinesiapp.ai.v1 import lifecycle_pb2, lifecycle_pb2_grpc
 from kinesiapp.common.v1 import ai_state_pb2
 
 from kinesiapp_ai.lifecycle.model_warmer import ModelWarmer
 from kinesiapp_ai.rpc.lifecycle_servicer import AiLifecycleServicer
-from kinesiapp_ai.rpc.server import build_interceptors, mark_serving
-from kinesiapp_ai.rpc.service_factory import AiServiceFactory, ServicerRegistration
+from kinesiapp_ai.rpc.server import mark_serving
+from kinesiapp_ai.rpc.service_factory import AiServiceFactory
 from kinesiapp_ai.settings.pose import PoseSettings
-
-TOKEN = "s" * 32
-WITH_TOKEN = (("authorization", f"Bearer {TOKEN}"),)
-
-
-@asynccontextmanager
-async def _serving(registrations: Sequence[ServicerRegistration]) -> AsyncIterator[grpc.aio.Channel]:
-    server = grpc.aio.server(interceptors=build_interceptors(TOKEN))
-    for register in registrations:
-        register(server)
-    port = server.add_insecure_port("127.0.0.1:0")
-    await server.start()
-    try:
-        async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
-            yield channel
-    finally:
-        await server.stop(None)
-
-
-def _reason(error: grpc.aio.AioRpcError) -> str:
-    status = rpc_status.from_call(error)
-    info = error_details_pb2.ErrorInfo()
-    status.details[0].Unpack(info)
-    return info.reason
+from tests.grpc_harness import TOKEN, WITH_TOKEN, error_reason, serving
 
 
 def _gated_loader() -> tuple[Callable[[], str], threading.Event]:
@@ -57,7 +31,7 @@ def _gated_loader() -> tuple[Callable[[], str], threading.Event]:
 def test_health_reports_serving_only_with_the_service_token() -> None:
     async def main():
         factory = AiServiceFactory(PoseSettings())
-        async with _serving(factory.registrations()) as channel:
+        async with serving(factory.registrations()) as channel:
             await mark_serving(factory.health, factory.service_names())
             stub = health_pb2_grpc.HealthStub(channel)
             overall = await stub.Check(health_pb2.HealthCheckRequest(), metadata=WITH_TOKEN)
@@ -74,13 +48,13 @@ def test_health_reports_serving_only_with_the_service_token() -> None:
 
     assert overall == lifecycle == health_pb2.HealthCheckResponse.SERVING
     assert anonymous.code() == grpc.StatusCode.UNAUTHENTICATED
-    assert _reason(anonymous) == "UNAUTHORIZED"
+    assert error_reason(anonymous) == "UNAUTHORIZED"
 
 
 def test_wrong_or_malformed_tokens_are_rejected() -> None:
     async def main():
         factory = AiServiceFactory(PoseSettings())
-        async with _serving(factory.registrations()) as channel:
+        async with serving(factory.registrations()) as channel:
             stub = lifecycle_pb2_grpc.AiLifecycleServiceStub(channel)
             errors = []
             for metadata in (
@@ -91,7 +65,7 @@ def test_wrong_or_malformed_tokens_are_rejected() -> None:
                 try:
                     await stub.WarmUp(lifecycle_pb2.WarmUpRequest(), metadata=metadata)
                 except grpc.aio.AioRpcError as error:
-                    errors.append((error.code(), _reason(error)))
+                    errors.append((error.code(), error_reason(error)))
             return errors
 
     assert asyncio.run(main()) == [(grpc.StatusCode.UNAUTHENTICATED, "UNAUTHORIZED")] * 3
@@ -102,7 +76,7 @@ def test_warm_up_answers_without_waiting_and_then_reports_ready() -> None:
         load, release = _gated_loader()
         warmer = ModelWarmer(load)
         registration = partial(lifecycle_pb2_grpc.add_AiLifecycleServiceServicer_to_server, AiLifecycleServicer(warmer))
-        async with _serving([registration]) as channel:
+        async with serving([registration]) as channel:
             stub = lifecycle_pb2_grpc.AiLifecycleServiceStub(channel)
             first = await asyncio.wait_for(stub.WarmUp(lifecycle_pb2.WarmUpRequest(), metadata=WITH_TOKEN), 2)
             again = await stub.WarmUp(lifecycle_pb2.WarmUpRequest(), metadata=WITH_TOKEN)
