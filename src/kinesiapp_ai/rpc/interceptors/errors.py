@@ -33,7 +33,10 @@ class ErrorInterceptor(CallScopeInterceptor):
                 await context.abort(grpc.StatusCode.INTERNAL, "Internal error")
             await self._abort(context, error.reason, error.message)
         except (VideoAnalysisError, LlmUnavailableError) as error:
-            reason = REASON_BY_EXPECTED_ERROR.get(type(error))
+            # Busco por herencia para que una variante del error (como la saturación del LLM) use el motivo de su base
+            reason = next(
+                (REASON_BY_EXPECTED_ERROR[cls] for cls in type(error).__mro__ if cls in REASON_BY_EXPECTED_ERROR), None
+            )
             if reason is None:
                 logger.error("Expected error %s has no reason in %s", type(error).__name__, method)
                 await context.abort(grpc.StatusCode.INTERNAL, "Internal error")
