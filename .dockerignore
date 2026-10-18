@@ -2,3 +2,12 @@ __pycache__
 *.pyc
 *.egg-info
 .venv
+.git
+.env
+# Los modelos los descarga el build, fijados por checksum
+models
+# Lo genera el build de Docker
+generated
+tests
+graphify-out
+.claude
