@@ -8,3 +8,11 @@ class UnreadableVideoError(VideoAnalysisError):
 
 class NoMovementDetectedError(VideoAnalysisError):
     pass
+
+
+class VideoTooLongError(VideoAnalysisError):
+    pass
+
+
+class AnalysisCancelledError(Exception):
+    """La lanzo dentro del hilo del análisis cuando el cliente cancela, para soltar el video y la memoria cuanto antes."""
