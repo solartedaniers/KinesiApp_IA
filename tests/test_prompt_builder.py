@@ -1,16 +1,16 @@
-"""JumpAnalysisPromptBuilder con datos simples: modo reducido, historial y catálogo, sin red ni base de datos."""
+"""MovementAnalysisPromptBuilder con datos simples: modo reducido, historial y catálogo, sin red ni base de datos."""
 import pytest
 
 from kinesiapp_ai.chat.pattern_catalog import RiskPatternCatalog
-from kinesiapp_ai.chat.prompt_builder import AnalysisPromptInput, HistoryMessage, JumpAnalysisPromptBuilder
+from kinesiapp_ai.chat.prompt_builder import AnalysisPromptInput, HistoryMessage, MovementAnalysisPromptBuilder
 
 RISK_LEVEL_MODERATE = 0.33
 RISK_LEVEL_HIGH = 0.66
 MAX_REPETITIONS = 5
 
 
-def _builder(max_history_messages: int = 10) -> JumpAnalysisPromptBuilder:
-    return JumpAnalysisPromptBuilder(
+def _builder(max_history_messages: int = 10) -> MovementAnalysisPromptBuilder:
+    return MovementAnalysisPromptBuilder(
         catalog=RiskPatternCatalog([]),
         risk_level_moderate=RISK_LEVEL_MODERATE,
         risk_level_high=RISK_LEVEL_HIGH,
