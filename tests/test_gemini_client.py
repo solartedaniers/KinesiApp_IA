@@ -4,7 +4,7 @@ import asyncio
 
 import httpx
 import pytest
-from google.genai import errors
+from google.genai import errors, types
 
 from kinesiapp_ai.chat.gemini_client import GeminiLlmClient
 from kinesiapp_ai.chat.llm import LlmOverloadedError, LlmRequest, LlmTurn, LlmUnavailableError
@@ -15,10 +15,19 @@ REQUEST = LlmRequest(system_instruction="instrucciones", turns=[LlmTurn(role="us
 class _Chunk:
     def __init__(self, text: str | None) -> None:
         self.text = text
+        self.usage_metadata = None
 
 
-def _client(monkeypatch: pytest.MonkeyPatch, chunks: list, error: Exception | None = None, fail_at_start: bool = False):
-    client = GeminiLlmClient(api_key="test-key", model_name="test-model", timeout_seconds=5, max_output_tokens=100)
+def _client(
+    monkeypatch: pytest.MonkeyPatch,
+    chunks: list,
+    error: Exception | None = None,
+    fail_at_start: bool = False,
+    thinking_level: str | None = "LOW",
+):
+    client = GeminiLlmClient(
+        api_key="test-key", model_name="test-model", timeout_seconds=5, max_output_tokens=100, thinking_level=thinking_level
+    )
     calls = []
 
     async def stream():
@@ -56,6 +65,22 @@ def test_streams_each_text_chunk_with_instructions_turns_and_model(monkeypatch: 
     assert call["model"] == "test-model"
     assert (call["config"].system_instruction, call["config"].max_output_tokens) == ("instrucciones", 100)
     assert [(content.role, content.parts[0].text) for content in call["contents"]] == [("user", "hola")]
+
+
+def test_the_configured_thinking_level_is_sent_so_reasoning_does_not_eat_the_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, calls = _client(monkeypatch, ["ok"])
+
+    _collect(client, [])
+
+    assert calls[0]["config"].thinking_config.thinking_level == types.ThinkingLevel.LOW
+
+
+def test_without_thinking_level_the_model_default_applies(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, calls = _client(monkeypatch, ["ok"], thinking_level=None)
+
+    _collect(client, [])
+
+    assert calls[0]["config"].thinking_config is None
 
 
 @pytest.mark.parametrize(

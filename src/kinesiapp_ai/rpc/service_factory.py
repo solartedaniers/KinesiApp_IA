@@ -97,6 +97,7 @@ class AiServiceFactory:
             model_name=model_name,
             timeout_seconds=chat.GEMINI_TIMEOUT_SECONDS,
             max_output_tokens=chat.GEMINI_MAX_OUTPUT_TOKENS,
+            thinking_level=chat.GEMINI_THINKING_LEVEL,
         )
 
     def registrations(self) -> list[ServicerRegistration]:

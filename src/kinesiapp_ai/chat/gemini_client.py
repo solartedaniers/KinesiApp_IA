@@ -12,7 +12,9 @@ _OVERLOADED_STATUS = 503
 class GeminiLlmClient:
     """Adapter sobre el SDK oficial google-genai, en streaming. Cualquier falla del proveedor sale como LlmUnavailableError."""
 
-    def __init__(self, api_key: str, model_name: str, timeout_seconds: float, max_output_tokens: int) -> None:
+    def __init__(
+        self, api_key: str, model_name: str, timeout_seconds: float, max_output_tokens: int, thinking_level: str | None
+    ) -> None:
         # Hago un solo intento: ante una falla respondo no disponible, sin reintentos que gasten cuota
         self._client = genai.Client(
             api_key=api_key,
@@ -22,6 +24,9 @@ class GeminiLlmClient:
         )
         self._model_name = model_name
         self._max_output_tokens = max_output_tokens
+        # Con el razonamiento por defecto, el modelo gastaba casi todo max_output_tokens pensando: la respuesta
+        # salía truncada y el primer texto tardaba varias veces más
+        self._thinking = types.ThinkingConfig(thinking_level=thinking_level) if thinking_level else None
 
     async def stream_reply(self, request: LlmRequest) -> AsyncIterator[str]:
         produced = False
@@ -34,6 +39,7 @@ class GeminiLlmClient:
                 config=types.GenerateContentConfig(
                     system_instruction=request.system_instruction,
                     max_output_tokens=self._max_output_tokens,
+                    thinking_config=self._thinking,
                 ),
             )
             async for chunk in stream:

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import Field, SecretStr
 
 from kinesiapp_ai.settings.base import EnvSettings
@@ -13,6 +15,9 @@ class AssistantSettings(EnvSettings):
     GEMINI_FALLBACK_MODEL: str | None = Field(default=None, min_length=1)
     GEMINI_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0)
     GEMINI_MAX_OUTPUT_TOKENS: int = Field(default=1024, gt=0)
+    # Cuánto razona el modelo antes de responder. Ese razonamiento también cuenta contra GEMINI_MAX_OUTPUT_TOKENS;
+    # vacío deja el del modelo, para modelos que no aceptan el ajuste
+    GEMINI_THINKING_LEVEL: Literal["MINIMAL", "LOW", "MEDIUM", "HIGH"] | None = "LOW"
     CHAT_QUESTION_MAX_CHARS: int = Field(default=1000, gt=0)
     # Recorto aquí el historial que me manda el backend: solo los últimos mensajes van al prompt
     CHAT_HISTORY_MAX_MESSAGES: int = Field(default=10, ge=0)
