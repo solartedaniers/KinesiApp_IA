@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from kinesiapp_ai.settings.analysis import AnalysisSettings
+from kinesiapp_ai.settings.assistant import AssistantSettings
 from kinesiapp_ai.settings.service_auth import ServiceAuthSettings
 from kinesiapp_ai.settings.video_download import VideoDownloadSettings
 
@@ -46,3 +47,10 @@ def test_without_allowed_hosts_the_ai_does_not_start(monkeypatch: pytest.MonkeyP
 
     with pytest.raises(ValidationError, match="ALLOWED_HOSTS"):
         VideoDownloadSettings(_env_file=None)
+
+
+def test_the_fallback_model_is_optional_and_empty_means_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", SECRET)
+    monkeypatch.setenv("GEMINI_FALLBACK_MODEL", "")
+
+    assert AssistantSettings(_env_file=None).GEMINI_FALLBACK_MODEL is None

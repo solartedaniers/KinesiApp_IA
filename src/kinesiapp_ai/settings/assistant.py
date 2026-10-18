@@ -9,6 +9,8 @@ class AssistantSettings(EnvSettings):
     # Sin valor por defecto, como todo secreto: si falta, la IA no arranca
     GEMINI_API_KEY: SecretStr = Field(min_length=1)
     GEMINI_MODEL: str = Field(default="gemini-3.8-flash", min_length=1)
+    # Opcional: si falta, cuando el principal se satura respondo ASSISTANT_UNAVAILABLE sin reintentar
+    GEMINI_FALLBACK_MODEL: str | None = Field(default=None, min_length=1)
     GEMINI_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0)
     GEMINI_MAX_OUTPUT_TOKENS: int = Field(default=1024, gt=0)
     CHAT_QUESTION_MAX_CHARS: int = Field(default=1000, gt=0)
