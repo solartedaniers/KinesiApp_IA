@@ -8,7 +8,7 @@ class LlmUnavailableError(Exception):
 
 
 class LlmOverloadedError(LlmUnavailableError):
-    """El modelo está saturado (503): es temporal y otro modelo sí podría responder."""
+    """El modelo está saturado (503 o 504) o no dio texto a tiempo: es temporal y otro modelo sí podría responder."""
 
 
 @dataclass(frozen=True)

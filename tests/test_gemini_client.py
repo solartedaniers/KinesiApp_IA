@@ -24,14 +24,22 @@ def _client(
     error: Exception | None = None,
     fail_at_start: bool = False,
     thinking_level: str | None = "LOW",
+    first_text_timeout: float = 5,
+    pause: float = 0,
 ):
     client = GeminiLlmClient(
-        api_key="test-key", model_name="test-model", timeout_seconds=5, max_output_tokens=100, thinking_level=thinking_level
+        api_key="test-key",
+        model_name="test-model",
+        timeout_seconds=5,
+        first_text_timeout_seconds=first_text_timeout,
+        max_output_tokens=100,
+        thinking_level=thinking_level,
     )
     calls = []
 
     async def stream():
         for chunk in chunks:
+            await asyncio.sleep(pause)
             yield _Chunk(chunk)
         if error and not fail_at_start:
             raise error
@@ -125,12 +133,46 @@ def test_the_failure_names_the_provider_status_code(monkeypatch: pytest.MonkeyPa
         _collect(client, [])
 
 
-def test_a_503_is_reported_as_overloaded_and_other_failures_are_not(monkeypatch: pytest.MonkeyPatch) -> None:
-    overloaded, _ = _client(monkeypatch, [], errors.ServerError(503, {"error": {"message": "high demand"}}), fail_at_start=True)
-    with pytest.raises(LlmOverloadedError):
-        _collect(overloaded, [])
+@pytest.mark.parametrize(
+    "error",
+    [
+        errors.ServerError(503, {"error": {"message": "high demand"}}),
+        errors.ServerError(504, {"error": {"message": "deadline"}}),
+        httpx.ReadTimeout("timeout"),
+        TimeoutError(),
+    ],
+    ids=["503", "504", "httpx-timeout", "timeout"],
+)
+def test_saturation_and_timeouts_before_any_text_are_overloaded_so_the_fallback_answers(
+    monkeypatch: pytest.MonkeyPatch, error
+) -> None:
+    client, _ = _client(monkeypatch, [], error, fail_at_start=True)
 
+    with pytest.raises(LlmOverloadedError):
+        _collect(client, [])
+
+
+def test_quota_is_not_overloaded_so_the_fallback_does_not_spend_more_quota(monkeypatch: pytest.MonkeyPatch) -> None:
     quota, _ = _client(monkeypatch, [], errors.ClientError(429, {"error": {"message": "quota"}}), fail_at_start=True)
+
     with pytest.raises(LlmUnavailableError) as raised:
         _collect(quota, [])
+
     assert not isinstance(raised.value, LlmOverloadedError)
+
+
+def test_a_model_that_sends_no_text_in_time_is_cut_as_overloaded(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Reproduzco el 21-oct: el principal se quedó callado y el chat esperó 30 s para nada
+    client, _ = _client(monkeypatch, ["tarde"], first_text_timeout=0.05, pause=1)
+
+    with pytest.raises(LlmOverloadedError):
+        _collect(client, [])
+
+
+def test_after_the_first_text_the_first_text_deadline_no_longer_applies(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, _ = _client(monkeypatch, ["Hola, ", "atleta."], first_text_timeout=0.15, pause=0.1)
+    received: list[str] = []
+
+    _collect(client, received)
+
+    assert received == ["Hola, ", "atleta."]

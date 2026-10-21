@@ -96,6 +96,7 @@ class AiServiceFactory:
             api_key=chat.GEMINI_API_KEY.get_secret_value(),
             model_name=model_name,
             timeout_seconds=chat.GEMINI_TIMEOUT_SECONDS,
+            first_text_timeout_seconds=chat.GEMINI_FIRST_TEXT_TIMEOUT_SECONDS,
             max_output_tokens=chat.GEMINI_MAX_OUTPUT_TOKENS,
             thinking_level=chat.GEMINI_THINKING_LEVEL,
         )

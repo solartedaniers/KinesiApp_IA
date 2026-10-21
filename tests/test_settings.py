@@ -54,3 +54,12 @@ def test_the_fallback_model_is_optional_and_empty_means_none(monkeypatch: pytest
     monkeypatch.setenv("GEMINI_FALLBACK_MODEL", "")
 
     assert AssistantSettings(_env_file=None).GEMINI_FALLBACK_MODEL is None
+
+
+def test_the_first_text_deadline_cannot_exceed_the_whole_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", SECRET)
+    monkeypatch.setenv("GEMINI_TIMEOUT_SECONDS", "10")
+    monkeypatch.setenv("GEMINI_FIRST_TEXT_TIMEOUT_SECONDS", "20")
+
+    with pytest.raises(ValidationError):
+        AssistantSettings(_env_file=None)
