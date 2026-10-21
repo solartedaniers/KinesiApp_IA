@@ -1,5 +1,5 @@
 class VideoAnalysisError(Exception):
-    """Base for expected failures of a video analysis (as opposed to bugs)."""
+    """Base de las fallas esperadas de un análisis de video, para distinguirlas de los errores de código."""
 
 
 class UnreadableVideoError(VideoAnalysisError):

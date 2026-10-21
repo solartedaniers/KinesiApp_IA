@@ -1,4 +1,4 @@
-"""Riesgo por patrones (§5.2 y §5.6): rampas, estrategias y RiskScoreAggregator."""
+"""Riesgo por patrones: rampas, estrategias y RiskScoreAggregator."""
 import math
 
 import pytest

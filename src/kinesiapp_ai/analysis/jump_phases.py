@@ -21,7 +21,7 @@ from kinesiapp_ai.analysis.pose_series import (
 class JumpPhaseDetector:
     """Encuentra cada aterrizaje y devuelve su ventana de amortiguación.
 
-    Las tres reglas confirmadas con videos reales (docs/design/video-analysis-pipeline.md §5.1):
+    Uso tres reglas que confirmé con los videos reales del spike:
     cada salto se ancla en un ápice de la cadera; el pie está en el aire según su punto más bajo
     (tobillo, talón o punta); y el suelo es local, un percentil del pie en una ventana móvil.
     """

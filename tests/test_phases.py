@@ -1,4 +1,4 @@
-"""JumpPhaseDetector (las tres reglas de §5.1) y SquatBottomDetector, sobre series sintéticas."""
+"""JumpPhaseDetector (sus tres reglas) y SquatBottomDetector, sobre series sintéticas."""
 import numpy as np
 
 from kinesiapp_ai.analysis.angles import AngleCalculator

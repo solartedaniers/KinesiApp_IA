@@ -117,7 +117,7 @@ class AggregatedRisk:
 
 
 class RiskScoreAggregator:
-    """Combina parciales por patrones (docs/design/video-analysis-pipeline.md §5.2).
+    """Combina parciales por patrones.
 
     Patrón = parciales que deben darse juntos: su score en una ventana es el mínimo de ellos.
     Entre repeticiones, la mediana. El risk_score es el del peor patrón. No promedia: un promedio

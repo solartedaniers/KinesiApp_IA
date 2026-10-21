@@ -8,7 +8,7 @@ class PatternText:
     coaching_focus: str
 
 
-# Contenido curado de docs/design/video-analysis-pipeline.md §6.2. Placeholder sin revisión
+# Textos curados del diseño del pipeline. Son placeholders sin revisión
 # profesional, igual que los umbrales de riesgo: revisarlo antes de mostrarlo a usuarios reales
 PATTERN_TEXTS = {
     "rigid_landing": PatternText(

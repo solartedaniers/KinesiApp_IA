@@ -1,5 +1,5 @@
-# Texto tal cual de docs/design/video-analysis-pipeline.md §6.4. Si cambia el texto, cambia la
-# versión: se guarda en cada respuesta del asistente para saber con qué instrucciones se generó
+# Si cambia el texto, cambio la versión: se guarda en cada respuesta del asistente para saber con qué
+# instrucciones se generó
 SYSTEM_PROMPT_VERSION = "chat-system-prompt-v1"
 
 # Turno de usuario con el que se pide la primera explicación, apenas el análisis está listo. No es

@@ -28,7 +28,7 @@ class HistoryMessage:
 
 
 class MovementAnalysisPromptBuilder:
-    """Análisis + rol + historial → LlmRequest (docs/design/video-analysis-pipeline.md §6.3-§6.5).
+    """Análisis + rol + historial → LlmRequest.
 
     Sólo usa datos estructurados del análisis: nunca el video, nombres, email ni fecha de
     nacimiento. Los análisis sin risk_details (anteriores a que existiera) van en modo reducido.

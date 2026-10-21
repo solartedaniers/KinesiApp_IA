@@ -13,6 +13,6 @@ venv/
 graphify-out/
 graph.json
 
-# Claude Code (config local)
+# Configuración local del editor
 .claude/
 .claudeignore
