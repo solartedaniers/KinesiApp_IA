@@ -1,7 +1,7 @@
 """Pruebo la detección de la vista con YOLO y MediaPipe reales sobre los videos de Alexander.
 
 Los videos no se versionan: indico su carpeta con KINESIAPP_VIEW_VIDEOS_DIR y, si falta algo, estas pruebas
-se saltan. salto2 y sentadilla están grabados de lado y salto1 de frente.
+se saltan. salto2 y sentadilla están grabados de lado; salto1, salto3 y sentadilla3, de frente.
 """
 
 import os
@@ -25,6 +25,8 @@ VIDEOS = {
     "salto1.mp4": (Movement.JUMP, CameraView.FRONT),
     "salto2.mp4": (Movement.JUMP, CameraView.SIDE),
     "sentadilla.mp4": (Movement.SQUAT, CameraView.SIDE),
+    "salto3.mp4": (Movement.JUMP, CameraView.FRONT),
+    "sentadilla3.mp4": (Movement.SQUAT, CameraView.FRONT),
 }
 # Analizo como en producción (ANALYSIS_MAX_FRAME_SIDE_PX de Azure). salto1 dura 41 s: subo el tope solo
 # aquí porque lo que pruebo es la vista, no la duración
@@ -67,8 +69,12 @@ def test_the_side_videos_keep_the_side_patterns(results) -> None:
     assert set(results["sentadilla.mp4"].risk.pattern_scores) == set(risk.RISK_SQUAT_PATTERNS)
 
 
-def test_the_front_video_measures_the_valgus_of_every_landing(results) -> None:
-    risk = results["salto1.mp4"].risk
+@pytest.mark.parametrize(("name", "min_repetitions"), [("salto1.mp4", 20), ("salto3.mp4", 8), ("sentadilla3.mp4", 6)])
+def test_the_front_videos_measure_the_valgus_of_each_knee_in_every_repetition(results, name: str, min_repetitions: int) -> None:
+    risk = results[name].risk
     assert set(risk.pattern_scores) == set(RiskSettings().RISK_FRONT_PATTERNS)
-    assert len(risk.repetitions) >= 20
-    assert all(rep.partials["knee_valgus_left"].peak_frame is not None for rep in risk.repetitions)
+    assert len(risk.repetitions) >= min_repetitions
+    for rep in risk.repetitions:
+        for code in ("knee_valgus_left", "knee_valgus_right"):
+            assert rep.partials[code].peak_frame is not None
+            assert rep.partials[code].side is not None
