@@ -73,12 +73,14 @@ class MovementAnalysisPromptBuilder:
             "risk_score": analysis.risk_score,
             "risk_level": self._risk_level(analysis.risk_score),
             "details_available": has_details,
+            # Sin detalles no sé la vista: esos análisis son anteriores a detectarla y se hicieron de lado
+            "camera_view": details["camera_view"] if has_details else "side",
         }
         if has_details:
             data.update(self._detailed(details))
         else:
             data.update(self._reduced(analysis))
-        data["measurement_limits"] = self._catalog.measurement_limits()
+        data["measurement_limits"] = self._catalog.measurement_limits(data["camera_view"])
         return data
 
     def _risk_level(self, risk_score: float) -> str:
@@ -146,6 +148,7 @@ class MovementAnalysisPromptBuilder:
             "saturation_deg": signal["saturation_deg"],
             "measured_deg": signal["measured_deg"],
             "partial_score_median": signal["score_median"],
+            "side": signal["side"],
         }
 
     def _per_repetition(
@@ -159,10 +162,20 @@ class MovementAnalysisPromptBuilder:
             {
                 "time_s": round(rep["start_ms"] / 1000, 2),
                 "detected_by": rep["detected_by"],
-                **{code: rep["partials"][code] for code in signal_codes if code in rep["partials"]},
+                **{code: self._partial(rep["partials"][code]) for code in signal_codes if code in rep["partials"]},
             }
             for rep in selected
         ]
+
+    @staticmethod
+    def _partial(partial: dict[str, Any]) -> dict[str, Any]:
+        peak_ms = partial["peak_ms"]
+        return {
+            "measured_deg": partial["measured_deg"],
+            "score": partial["score"],
+            "side": partial["side"],
+            "peak_time_s": None if peak_ms is None else round(peak_ms / 1000, 2),
+        }
 
     def _history_turns(self, history: list[HistoryMessage]) -> list[LlmTurn]:
         # Un mensaje de usuario que quedó sin respuesta (falló el proveedor) no se reenvía

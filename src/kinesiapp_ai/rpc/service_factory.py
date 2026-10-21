@@ -77,7 +77,7 @@ class AiServiceFactory:
         risk, chat = settings.risk, settings.assistant
         prompts = MovementAnalysisPromptBuilder(
             # Le paso los patrones configurados: si alguno no tiene texto curado, fallo al arrancar
-            catalog=RiskPatternCatalog([risk.RISK_JUMP_PATTERNS, risk.RISK_SQUAT_PATTERNS]),
+            catalog=RiskPatternCatalog([risk.RISK_JUMP_PATTERNS, risk.RISK_SQUAT_PATTERNS, risk.RISK_FRONT_PATTERNS]),
             risk_level_moderate=risk.RISK_LEVEL_MODERATE,
             risk_level_high=risk.RISK_LEVEL_HIGH,
             max_repetitions=chat.CHAT_PROMPT_MAX_REPETITIONS,

@@ -3,6 +3,7 @@ import pytest
 
 from kinesiapp_ai.chat.pattern_catalog import RiskPatternCatalog
 from kinesiapp_ai.chat.prompt_builder import AnalysisPromptInput, HistoryMessage, MovementAnalysisPromptBuilder
+from kinesiapp_ai.settings.risk import RiskSettings
 
 RISK_LEVEL_MODERATE = 0.33
 RISK_LEVEL_HIGH = 0.66
@@ -74,3 +75,59 @@ def test_opening_uses_the_same_system_prompt_as_the_chat():
 def test_catalog_rejects_pattern_codes_without_text():
     with pytest.raises(ValueError):
         RiskPatternCatalog([{"new_pattern": ["knee_rigid"]}])
+
+
+def _frontal_details() -> dict:
+    signal = {
+        "signal": "knee_valgus",
+        "direction": "higher_is_riskier",
+        "onset_deg": 10.0,
+        "saturation_deg": 25.0,
+        "measured_deg": {"median": 21.0, "min": 18.0, "max": 24.0},
+        "score_median": 0.73,
+        "side": "left",
+    }
+    return {
+        "format_version": 1,
+        "risk_score": 0.73,
+        "dominant_pattern": "knee_valgus_left",
+        "camera_view": "front",
+        "repetitions_evaluated": 1,
+        "detection_methods": {"landing": 1},
+        "patterns": {"knee_valgus_left": {"score": 0.73, "repetitions_triggered": 1, "signals": {"knee_valgus_left": signal}}},
+        "repetitions": [
+            {
+                "start_ms": 1500,
+                "end_ms": 1800,
+                "detected_by": "landing",
+                "pattern_scores": {"knee_valgus_left": 0.73},
+                "partials": {"knee_valgus_left": {"measured_deg": 21.0, "score": 0.73, "side": "left", "peak_ms": 1633}},
+            }
+        ],
+    }
+
+
+def test_the_valgus_reaches_the_prompt_with_its_leg_moment_and_view_limits():
+    analysis = AnalysisPromptInput(movement="jump", risk_score=0.73, dominant_risk_pattern="knee_valgus_left", risk_details=_frontal_details())
+    data = _builder().analysis_data(analysis, "coach")
+    assert data["camera_view"] == "front"
+    assert data["dominant_pattern"]["code"] == "knee_valgus_left"
+    assert data["signals"][0]["side"] == "left"
+    assert data["per_repetition"][0]["knee_valgus_left"] == {"measured_deg": 21.0, "score": 0.73, "side": "left", "peak_time_s": 1.63}
+    assert any("Vista frontal" in limit for limit in data["measurement_limits"])
+
+
+def test_an_inconclusive_view_tells_the_assistant_to_record_from_the_front():
+    details = _frontal_details() | {"camera_view": "inconclusive"}
+    analysis = AnalysisPromptInput(movement="jump", risk_score=0.73, dominant_risk_pattern=None, risk_details=details)
+    assert any("grabar de frente" in limit for limit in _builder().analysis_data(analysis, "athlete")["measurement_limits"])
+
+
+def test_analyses_without_details_were_recorded_from_the_side():
+    data = _builder().analysis_data(_reduced(0.8, "rigid_landing"), "coach")
+    assert data["camera_view"] == "side"
+    assert any("Vista lateral" in limit for limit in data["measurement_limits"])
+
+
+def test_the_catalog_explains_every_frontal_pattern():
+    RiskPatternCatalog([RiskSettings().RISK_FRONT_PATTERNS])

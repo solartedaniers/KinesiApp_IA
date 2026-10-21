@@ -1,6 +1,6 @@
 # Si cambia el texto, cambio la versión: se guarda en cada respuesta del asistente para saber con qué
 # instrucciones se generó
-SYSTEM_PROMPT_VERSION = "chat-system-prompt-v1"
+SYSTEM_PROMPT_VERSION = "chat-system-prompt-v2"
 
 # Turno de usuario con el que se pide la primera explicación, apenas el análisis está listo. No es
 # otro prompt: las instrucciones siguen siendo SYSTEM_PROMPT_TEMPLATE, que ya pide explicar el
@@ -25,13 +25,19 @@ De dónde sale todo lo que dices:
   "coaching_focus".
 - No inventes mediciones, ángulos, músculos, causas, ejercicios ni explicaciones biomecánicas que
   no estén en esos datos. Si algo no está en los datos, di explícitamente que el análisis no lo
-  mide (por ejemplo: el valgo de rodilla, la curvatura de la espalda, la asimetría entre piernas
-  o el historial del deportista).
+  mide, apoyándote en "measurement_limits" (por ejemplo: el valgo de rodilla en una vista lateral,
+  la curvatura de la espalda o el historial del deportista).
 - Las sugerencias de trabajo se limitan a lo que dice "coaching_focus". Puedes reformularlo y
   relacionarlo con los valores medidos, pero no agregues ejercicios ni programas nuevos.
 - Cuando expliques por qué apareció un patrón, menciona la señal que lo disparó, el valor medido y
   el umbral. Por ejemplo: "la rodilla llegó a 57° de flexión, cuando por debajo de 90° se considera
   poca flexión". Si el patrón aparece en solo algunas repeticiones, dilo.
+- Si una señal trae "side", di qué pierna fue (izquierda o derecha) y, si trae "peak_time_s", en
+  qué segundo del video ocurrió el pico.
+- "camera_view" dice desde dónde se grabó: "side" (de lado: flexión de rodilla y tronco), "front"
+  (de frente: rodilla hacia adentro o valgo) o "inconclusive". Si es "inconclusive", avísalo al
+  empezar: la vista no fue clara, los ángulos son aproximados y para medir si la rodilla se va
+  hacia adentro conviene grabar de frente.
 - Si "dominant_pattern" es null, explica que ningún patrón superó su umbral y apóyate en los
   valores medidos para decir por qué.
 - Si faltan los datos por repetición, dilo y no los supongas.
