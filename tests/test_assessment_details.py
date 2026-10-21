@@ -7,7 +7,6 @@ from kinesiapp_ai.analysis.angles import AngleCalculator
 from kinesiapp_ai.analysis.movement_analyzer import MovementAnalysis, MovementAnalyzer
 from kinesiapp_ai.analysis.movement_strategy import Movement
 from kinesiapp_ai.analysis.preprocessing import LandmarkSeriesPreprocessor
-from kinesiapp_ai.analysis.risk_details import RiskDetailsSerializer
 from kinesiapp_ai.analysis.risk_level import RiskLevelClassifier
 from kinesiapp_ai.chat.assessment_details import RiskAssessmentDetails
 from kinesiapp_ai.pipeline.strategy_factory import MovementStrategyFactory
@@ -15,6 +14,7 @@ from kinesiapp_ai.rpc.analysis_messages import AnalysisMessages
 from kinesiapp_ai.settings.phases import MovementPhaseSettings
 from kinesiapp_ai.settings.risk import RiskSettings
 from tests.pose_fixtures import add_hip_hinge, add_jump, pose_series, standing_points
+from tests.risk_details_reference import RiskDetailsSerializer
 
 STRATEGIES = MovementStrategyFactory(MovementPhaseSettings(), RiskSettings()).build_all()
 

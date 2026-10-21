@@ -5,7 +5,9 @@ from kinesiapp.common.v1 import movement_pb2
 
 from kinesiapp_ai.analysis.movement_windows import DetectionMethod
 from kinesiapp_ai.analysis.risk import KneeFlexionRiskStrategy, TrunkFlexionRiskStrategy
-from kinesiapp_ai.analysis.risk_details import RISK_DETAILS_FORMAT_VERSION
+
+# Cambia si cambia la forma de los detalles: el constructor del prompt sabe qué esperar
+RISK_DETAILS_FORMAT_VERSION = 1
 
 _SIGNALS = {
     movement_pb2.JOINT_ANGLE_KNEE_FLEXION: KneeFlexionRiskStrategy.SIGNAL,

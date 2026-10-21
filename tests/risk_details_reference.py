@@ -5,13 +5,11 @@ from typing import Any
 
 from kinesiapp_ai.analysis.pose_series import PoseSeries
 from kinesiapp_ai.analysis.risk import AggregatedRisk, PartialScore, RepetitionRisk
-
-# Cambia si cambia la forma del JSON: quien lo lea (el chat) sabe qué esperar
-RISK_DETAILS_FORMAT_VERSION = 1
+from kinesiapp_ai.chat.assessment_details import RISK_DETAILS_FORMAT_VERSION
 
 
 class RiskDetailsSerializer:
-    """AggregatedRisk → JSON persistible en jump_analyses.risk_details.
+    """Referencia de las pruebas: los detalles armados directo del AggregatedRisk, sin pasar por el contrato.
 
     Por patrón: su score, cuántas repeticiones lo dispararon y, por cada señal, el ángulo medido
     (mediana, mínimo y máximo entre repeticiones), la rampa vigente y la dirección. Por

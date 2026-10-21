@@ -2,7 +2,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from kinesiapp_ai.analysis.risk_details import RISK_DETAILS_FORMAT_VERSION
+from kinesiapp_ai.chat.assessment_details import RISK_DETAILS_FORMAT_VERSION
 from kinesiapp_ai.chat.llm import LlmRequest, LlmTurn
 from kinesiapp_ai.chat.pattern_catalog import RiskPatternCatalog
 from kinesiapp_ai.chat.system_prompt import OPENING_REQUEST, SYSTEM_PROMPT_TEMPLATE
