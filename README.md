@@ -43,7 +43,7 @@ Toda la configuración está en `src/kinesiapp_ai/settings/`, como clases de `py
 
 - `ANALYSIS_MAX_CONCURRENCY`: un análisis a la vez con 512 MB de RAM;
 - `ANALYSIS_MAX_VIDEO_DURATION_SECONDS`: 40 s;
-- `ANALYSIS_MAX_FRAME_SIDE_PX`: recomiendo 720, porque con 1080×1920 el pico de memoria pasa de 446 a 417 MiB y el resultado es idéntico;
+- `ANALYSIS_MAX_FRAME_SIDE_PX`: recomiendo 720, porque con un video de 1080×1920 el pico de memoria baja de 451 a 417 MiB y el resultado es idéntico;
 - `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL` y `GEMINI_THINKING_LEVEL`: con el razonamiento por defecto, el modelo gastaba casi toda la salida pensando y la respuesta quedaba truncada.
 
 ## Cómo correrlo
