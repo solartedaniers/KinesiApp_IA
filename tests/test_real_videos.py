@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from kinesiapp_ai.analysis.camera_view import CameraView
 from kinesiapp_ai.analysis.movement_analyzer import AnalysisStage, MovementAnalysis
 from kinesiapp_ai.analysis.movement_strategy import Movement
 from kinesiapp_ai.lifecycle.analysis_models import AnalysisModelLoader
@@ -75,6 +76,10 @@ def test_the_bad_squat_is_a_hip_hinge_and_the_good_one_is_low_risk(results) -> N
     good, bad = results["sentadilla_bien_echa.mp4"].risk, results["sentadilla_mal_echa.mp4"].risk
     assert good.risk_score < LOW_RISK < bad.risk_score
     assert bad.dominant_pattern == "hip_hinge_squat"
+
+
+def test_every_spike_video_is_seen_from_the_side(results, reduced_results) -> None:
+    assert {result.view for result in [*results.values(), *reduced_results.values()]} == {CameraView.SIDE}
 
 
 def test_the_same_video_gives_the_same_result(results) -> None:
