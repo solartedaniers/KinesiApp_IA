@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from kinesiapp_ai.analysis.pose_series import SIDE_LANDMARKS, PoseSeries, Side
+from kinesiapp_ai.analysis.pose_series import LEFT_HIP, RIGHT_HIP, SIDE_LANDMARKS, PoseSeries, Side
 
 
 @dataclass(frozen=True)
@@ -11,11 +11,15 @@ class AngleSeries:
 
     knee_flexion: 0 = pierna extendida. trunk_inclination: recta cadera→hombro respecto de la
     vertical; 0 = erguido, más de 90 = hombros por debajo de la cadera.
+
+    knee_valgus: ángulo de proyección frontal (FPPA) de cada pierna, 0 = muslo y pierna alineados,
+    positivo = rodilla hacia adentro. Solo tiene sentido con la cámara de frente.
     """
 
     side: Side
     knee_flexion: np.ndarray
     trunk_inclination: np.ndarray
+    knee_valgus: dict[Side, np.ndarray]
 
 
 class AngleCalculator:
@@ -33,7 +37,22 @@ class AngleCalculator:
             side=side,
             knee_flexion=180.0 - self._interior_angle(hip, knee, ankle),
             trunk_inclination=self._angle_from_vertical(shoulder - hip),
+            knee_valgus={leg: self._frontal_projection_angle(points, leg) for leg in Side},
         )
+
+    @classmethod
+    def _frontal_projection_angle(cls, points: np.ndarray, side: Side) -> np.ndarray:
+        landmarks = SIDE_LANDMARKS[side]
+        hip, knee, ankle = (points[:, index] for index in (landmarks.hip, landmarks.knee, landmarks.ankle))
+        deviation = 180.0 - cls._interior_angle(hip, knee, ankle)
+        # El signo lo saco de la geometría y no de la etiqueta del lado: así sirve igual si el deportista da
+        # la espalda a la cámara. Hacia afuera es alejarse del centro de las caderas
+        outward = np.sign(hip[:, 0] - (points[:, LEFT_HIP, 0] + points[:, RIGHT_HIP, 0]) / 2)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            along = (knee[:, 1] - hip[:, 1]) / (ankle[:, 1] - hip[:, 1])
+        line_x = hip[:, 0] + along * (ankle[:, 0] - hip[:, 0])
+        inward = (knee[:, 0] - line_x) * outward < 0
+        return np.where(inward, deviation, -deviation)
 
     @staticmethod
     def _most_visible_side(series: PoseSeries) -> Side:

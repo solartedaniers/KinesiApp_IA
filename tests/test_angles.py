@@ -4,7 +4,7 @@ import pytest
 
 from kinesiapp_ai.analysis.angles import AngleCalculator
 from kinesiapp_ai.analysis.pose_series import LANDMARK_COUNT, SIDE_LANDMARKS, Side
-from tests.pose_fixtures import pose_series
+from tests.pose_fixtures import bend_knee_inward, frontal_points, pose_series
 
 LEFT = SIDE_LANDMARKS[Side.LEFT]
 
@@ -52,3 +52,31 @@ def test_unknown_landmarks_give_nan_instead_of_an_angle():
     points = _single_frame()
     points[0, LEFT.knee] = np.nan
     assert np.isnan(AngleCalculator().calculate(pose_series(points)).knee_flexion[0])
+
+
+@pytest.mark.parametrize("side", list(Side))
+@pytest.mark.parametrize("fppa", [20.0, -15.0, 0.0])
+def test_the_frontal_projection_angle_is_positive_when_the_knee_goes_inward(side: Side, fppa: float):
+    points = frontal_points(1)
+    bend_knee_inward(points, slice(None), side, fppa)
+
+    valgus = AngleCalculator().calculate(pose_series(points)).knee_valgus
+
+    assert valgus[side][0] == pytest.approx(fppa, abs=1e-6)
+    assert valgus[next(other for other in Side if other is not side)][0] == pytest.approx(0, abs=1e-6)
+
+
+def test_the_valgus_sign_does_not_depend_on_facing_the_camera():
+    # De espaldas, la izquierda del deportista queda a la izquierda de la imagen: hacia adentro sigue siendo positivo
+    points = frontal_points(1)
+    points[:, :, 0] = 1.0 - points[:, :, 0]
+    bend_knee_inward(points, slice(None), Side.LEFT, 18.0)
+
+    assert AngleCalculator().calculate(pose_series(points)).knee_valgus[Side.LEFT][0] == pytest.approx(18.0)
+
+
+def test_the_valgus_of_an_unknown_knee_is_not_measured():
+    points = frontal_points(1)
+    points[0, SIDE_LANDMARKS[Side.RIGHT].knee] = np.nan
+
+    assert np.isnan(AngleCalculator().calculate(pose_series(points)).knee_valgus[Side.RIGHT][0])

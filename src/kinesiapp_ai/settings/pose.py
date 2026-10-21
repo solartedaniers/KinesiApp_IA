@@ -35,3 +35,8 @@ class PoseSettings(EnvSettings):
     PERSON_TRACK_SMOOTHING: float = Field(default=0.5, gt=0, le=1)
     LANDMARK_VISIBILITY_THRESHOLD: float = Field(default=0.1, ge=0, le=1)
     LANDMARK_SMOOTHING_WINDOW_FRAMES: int = Field(default=3, ge=1)
+    # Vista de la cámara por el ancho aparente de hombros y caderas sobre el alto del torso (mediana del
+    # video). Entre los dos cortes la vista es diagonal y no concluyente. Los calibré con los videos de lado
+    # del spike y con la geometría de un cuerpo de frente: no son definitivos
+    CAMERA_VIEW_SIDE_MAX_WIDTH_RATIO: float = Field(default=0.3, ge=0)
+    CAMERA_VIEW_FRONT_MIN_WIDTH_RATIO: float = Field(default=0.4, gt=0)
