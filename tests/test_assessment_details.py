@@ -13,7 +13,7 @@ from kinesiapp_ai.pipeline.strategy_factory import MovementStrategyFactory
 from kinesiapp_ai.rpc.analysis_messages import AnalysisMessages
 from kinesiapp_ai.settings.phases import MovementPhaseSettings
 from kinesiapp_ai.settings.risk import RiskSettings
-from tests.pose_fixtures import add_hip_hinge, add_jump, pose_series, standing_points
+from tests.pose_fixtures import VIEW_CLASSIFIER, add_hip_hinge, add_jump, pose_series, standing_points
 from tests.risk_details_reference import RiskDetailsSerializer
 
 STRATEGIES = MovementStrategyFactory(MovementPhaseSettings(), RiskSettings()).build_all()
@@ -49,7 +49,7 @@ def _hinge() -> np.ndarray:
 
 
 def _analysis(points: np.ndarray, movement: Movement) -> MovementAnalysis:
-    analyzer = MovementAnalyzer(_Fixed(points), LandmarkSeriesPreprocessor(0.1, 3), AngleCalculator())
+    analyzer = MovementAnalyzer(_Fixed(points), LandmarkSeriesPreprocessor(0.1, 3), AngleCalculator(), VIEW_CLASSIFIER)
     return analyzer.analyze("video.mp4", STRATEGIES[movement], _Silent())
 
 
@@ -58,4 +58,4 @@ def test_the_contract_assessment_gives_back_the_same_details(points: np.ndarray,
     analysis = _analysis(points, movement)
     assessment = AnalysisMessages(RiskLevelClassifier(0.33, 0.66), "p", "r").result(analysis).result.risk_assessment
 
-    assert RiskAssessmentDetails().to_details(assessment) == RiskDetailsSerializer().serialize(analysis.risk, analysis.series)
+    assert RiskAssessmentDetails().to_details(assessment) == RiskDetailsSerializer().serialize(analysis.risk, analysis.series, analysis.view)

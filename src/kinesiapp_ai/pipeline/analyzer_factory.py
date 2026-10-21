@@ -1,6 +1,7 @@
 from functools import partial
 
 from kinesiapp_ai.analysis.angles import AngleCalculator
+from kinesiapp_ai.analysis.camera_view import CameraViewClassifier
 from kinesiapp_ai.analysis.frame_downscaler import FrameDownscaler
 from kinesiapp_ai.analysis.frame_sampler import FrameSampler
 from kinesiapp_ai.analysis.movement_analyzer import MovementAnalyzer
@@ -43,4 +44,7 @@ class MovementAnalyzerFactory:
                 pose.LANDMARK_VISIBILITY_THRESHOLD, pose.LANDMARK_SMOOTHING_WINDOW_FRAMES
             ),
             angle_calculator=AngleCalculator(),
+            view_classifier=CameraViewClassifier(
+                pose.CAMERA_VIEW_SIDE_MAX_WIDTH_RATIO, pose.CAMERA_VIEW_FRONT_MIN_WIDTH_RATIO
+            ),
         )

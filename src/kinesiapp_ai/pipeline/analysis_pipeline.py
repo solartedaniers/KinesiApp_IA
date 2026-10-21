@@ -7,6 +7,7 @@ from kinesiapp.common.v1.errors_pb2 import ErrorReason
 
 from kinesiapp_ai.analysis.frame_sampler import FrameSampler
 from kinesiapp_ai.analysis.movement_analyzer import AnalysisStage, MovementAnalysis, MovementAnalyzer
+from kinesiapp_ai.analysis.camera_view import CameraView
 from kinesiapp_ai.analysis.movement_strategy import Movement, MovementStrategy
 from kinesiapp_ai.analysis.video_duration import VideoDurationGuard
 from kinesiapp_ai.lifecycle.analysis_models import AnalysisModels
@@ -42,7 +43,7 @@ class MovementAnalysisPipeline:
         slots: AnalysisSlots,
         warmer: ModelWarmer[AnalysisModels],
         analyzers: AnalyzerBuilder,
-        strategies: dict[Movement, MovementStrategy],
+        strategies: dict[Movement, dict[CameraView, MovementStrategy]],
         source: VideoSource,
         duration_guard: VideoDurationGuard,
         runner: ThreadedAnalysisRunner,
@@ -58,7 +59,7 @@ class MovementAnalysisPipeline:
         self._sampler = sampler
 
     async def analyze(self, video_url: str, movement: Movement) -> AsyncIterator[Progress | MovementAnalysis]:
-        strategy = self._strategies[movement]
+        strategies = self._strategies[movement]
         # Valido la URL antes de reservar el cupo: una URL rechazada no debe esperar a los modelos
         self._source.validate(video_url)
         with self._slots.reserve():
@@ -70,7 +71,7 @@ class MovementAnalysisPipeline:
                 metadata = await asyncio.to_thread(self._duration_guard.check, video_path)
                 # Reporto el total de frames que de verdad analizo, que con un fps máximo es menor que el del archivo
                 frames_total = self._sampler.sampled_count(metadata.frame_count, metadata.fps)
-                async for event in self._runner.run(self._analyzers.build(models), video_path, strategy):
+                async for event in self._runner.run(self._analyzers.build(models), video_path, strategies):
                     # Solo la extracción de pose lleva frames, como dice el contrato
                     if isinstance(event, StageReached) and event.stage is AnalysisStage.EXTRACTING_POSE:
                         yield Progress(event.stage, frames_total=frames_total)

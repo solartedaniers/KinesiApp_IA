@@ -35,7 +35,7 @@ from kinesiapp_ai.settings.video_download import VideoDownloadSettings
 from kinesiapp_ai.video_source.http_video_source import HttpVideoSource
 from kinesiapp_ai.video_source.url_policy import AllowedHostPolicy
 from tests.grpc_harness import WITH_TOKEN, error_reason, serving
-from tests.pose_fixtures import FPS, add_jump, standing_points
+from tests.pose_fixtures import FPS, VIEW_CLASSIFIER, add_jump, standing_points
 from tests.video_fixtures import write_video
 
 HOST = "storage.neon.test"
@@ -69,7 +69,7 @@ class _Analyzers:
         extractor = VideoPoseExtractor(
             VideoFrameReader(), partial(_JumpEstimator, self._delay), max_duration_ms=round(MAX_SECONDS * 1000)
         )
-        return MovementAnalyzer(extractor, LandmarkSeriesPreprocessor(0.1, 3), AngleCalculator())
+        return MovementAnalyzer(extractor, LandmarkSeriesPreprocessor(0.1, 3), AngleCalculator(), VIEW_CLASSIFIER)
 
 
 class _World:

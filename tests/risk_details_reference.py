@@ -3,6 +3,7 @@ from collections import Counter
 from statistics import median
 from typing import Any
 
+from kinesiapp_ai.analysis.camera_view import CameraView
 from kinesiapp_ai.analysis.pose_series import PoseSeries
 from kinesiapp_ai.analysis.risk import AggregatedRisk, PartialScore, RepetitionRisk
 from kinesiapp_ai.chat.assessment_details import RISK_DETAILS_FORMAT_VERSION
@@ -13,14 +14,16 @@ class RiskDetailsSerializer:
 
     Por patrón: su score, cuántas repeticiones lo dispararon y, por cada señal, el ángulo medido
     (mediana, mínimo y máximo entre repeticiones), la rampa vigente y la dirección. Por
-    repetición: su ventana en ms, cómo se detectó y sus valores. NaN se guarda como null.
+    repetición: su ventana en ms, cómo se detectó y sus valores, con la pierna y el instante del pico. NaN
+    se guarda como null.
     """
 
-    def serialize(self, risk: AggregatedRisk, series: PoseSeries) -> dict[str, Any]:
+    def serialize(self, risk: AggregatedRisk, series: PoseSeries, view: CameraView) -> dict[str, Any]:
         return {
             "format_version": RISK_DETAILS_FORMAT_VERSION,
             "risk_score": _round_score(risk.risk_score),
             "dominant_pattern": risk.dominant_pattern,
+            "camera_view": view.value,
             "repetitions_evaluated": len(risk.repetitions),
             "detection_methods": dict(Counter(rep.window.detected_by.value for rep in risk.repetitions)),
             "patterns": {
@@ -56,6 +59,7 @@ class RiskDetailsSerializer:
                 else None
             ),
             "score_median": _round_score(median(scores)) if scores else None,
+            "side": reference.side.value if reference.side else None,
         }
 
     @staticmethod
@@ -66,7 +70,12 @@ class RiskDetailsSerializer:
             "detected_by": rep.window.detected_by.value,
             "pattern_scores": {pattern: _round_score(score) for pattern, score in rep.pattern_scores.items()},
             "partials": {
-                code: {"measured_deg": _round_angle(partial.measured_deg), "score": _round_score(partial.score)}
+                code: {
+                    "measured_deg": _round_angle(partial.measured_deg),
+                    "score": _round_score(partial.score),
+                    "side": partial.side.value if partial.side else None,
+                    "peak_ms": None if partial.peak_frame is None else series.frame_timestamp_ms(partial.peak_frame),
+                }
                 for code, partial in rep.partials.items()
             },
         }

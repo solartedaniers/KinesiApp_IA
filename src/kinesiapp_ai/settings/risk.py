@@ -32,6 +32,22 @@ class RiskSettings(EnvSettings):
     RISK_SQUAT_PATTERNS: dict[str, list[str]] = {
         "hip_hinge_squat": ["squat_trunk_lean", "squat_knee_shallow"],
     }
+    # Valgo dinámico de rodilla con la cámara de frente: ángulo de proyección frontal (FPPA) máximo de cada
+    # pierna en el aterrizaje o en el fondo. Son órdenes de magnitud de la literatura de FPPA en 2D, SIN
+    # validación clínica, igual que los demás: orientativos
+    RISK_JUMP_KNEE_VALGUS_ONSET_DEG: float = 10.0
+    RISK_JUMP_KNEE_VALGUS_SATURATION_DEG: float = 25.0
+    RISK_SQUAT_KNEE_VALGUS_ONSET_DEG: float = 8.0
+    RISK_SQUAT_KNEE_VALGUS_SATURATION_DEG: float = 20.0
+    # Diferencia de valgo entre las dos rodillas en la misma repetición
+    RISK_KNEE_VALGUS_ASYMMETRY_ONSET_DEG: float = 10.0
+    RISK_KNEE_VALGUS_ASYMMETRY_SATURATION_DEG: float = 20.0
+    # Los mismos patrones de frente para el salto y la sentadilla
+    RISK_FRONT_PATTERNS: dict[str, list[str]] = {
+        "knee_valgus_left": ["knee_valgus_left"],
+        "knee_valgus_right": ["knee_valgus_right"],
+        "valgus_asymmetry": ["knee_valgus_asymmetry"],
+    }
     # Con nivel "high" el chat recomienda consulta profesional
     RISK_LEVEL_MODERATE: float = Field(default=0.33, ge=0, le=1)
     RISK_LEVEL_HIGH: float = Field(default=0.66, ge=0, le=1)

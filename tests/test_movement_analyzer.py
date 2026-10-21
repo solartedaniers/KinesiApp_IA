@@ -6,16 +6,25 @@ import numpy as np
 import pytest
 
 from kinesiapp_ai.analysis.angles import AngleCalculator
+from kinesiapp_ai.analysis.camera_view import CameraView
 from kinesiapp_ai.analysis.errors import NoMovementDetectedError
 from kinesiapp_ai.analysis.movement_analyzer import AnalysisStage, MovementAnalyzer
 from kinesiapp_ai.analysis.movement_strategy import Movement
 from kinesiapp_ai.analysis.movement_windows import DetectionMethod
-from kinesiapp_ai.analysis.pose_series import PoseSeries
+from kinesiapp_ai.analysis.pose_series import LEFT_HIP, LEFT_SHOULDER, RIGHT_HIP, RIGHT_SHOULDER, PoseSeries, Side
 from kinesiapp_ai.analysis.preprocessing import LandmarkSeriesPreprocessor
 from kinesiapp_ai.pipeline.strategy_factory import MovementStrategyFactory
 from kinesiapp_ai.settings.phases import MovementPhaseSettings
 from kinesiapp_ai.settings.risk import RiskSettings
-from tests.pose_fixtures import add_hip_hinge, add_jump, pose_series, standing_points
+from tests.pose_fixtures import (
+    VIEW_CLASSIFIER,
+    add_hip_hinge,
+    add_jump,
+    bend_knee_inward,
+    frontal_points,
+    pose_series,
+    standing_points,
+)
 
 STRATEGIES = MovementStrategyFactory(MovementPhaseSettings(), RiskSettings()).build_all()
 
@@ -47,7 +56,7 @@ class _RecordingObserver:
 
 def _analyze(points: np.ndarray, movement: Movement):
     analyzer = MovementAnalyzer(
-        _FixedExtractor(pose_series(points)), LandmarkSeriesPreprocessor(0.1, 3), AngleCalculator()
+        _FixedExtractor(pose_series(points)), LandmarkSeriesPreprocessor(0.1, 3), AngleCalculator(), VIEW_CLASSIFIER
     )
     observer = _RecordingObserver()
     return analyzer.analyze(Path("video.mp4"), STRATEGIES[movement], observer), observer
@@ -78,7 +87,7 @@ def test_a_squat_without_knee_bend_falls_back_to_the_trunk_hinge() -> None:
 def test_standing_still_has_no_movement_and_never_reaches_scoring() -> None:
     observer = _RecordingObserver()
     analyzer = MovementAnalyzer(
-        _FixedExtractor(pose_series(standing_points(60))), LandmarkSeriesPreprocessor(0.1, 3), AngleCalculator()
+        _FixedExtractor(pose_series(standing_points(60))), LandmarkSeriesPreprocessor(0.1, 3), AngleCalculator(), VIEW_CLASSIFIER
     )
 
     with pytest.raises(NoMovementDetectedError):
@@ -87,8 +96,9 @@ def test_standing_still_has_no_movement_and_never_reaches_scoring() -> None:
     assert AnalysisStage.SCORING_RISK not in observer.stages
 
 
-def test_the_factory_builds_one_strategy_per_movement() -> None:
+def test_the_factory_builds_one_strategy_per_movement_and_view() -> None:
     assert set(STRATEGIES) == set(Movement)
+    assert all(set(by_view) == set(CameraView) for by_view in STRATEGIES.values())
 
 
 def test_a_pattern_with_an_unknown_partial_fails_when_building_the_strategies() -> None:
@@ -96,3 +106,43 @@ def test_a_pattern_with_an_unknown_partial_fails_when_building_the_strategies() 
 
     with pytest.raises(ValueError, match="ankle_wobble"):
         MovementStrategyFactory(MovementPhaseSettings(), risk).build_all()
+
+
+def _frontal_jump(left_fppa: float) -> np.ndarray:
+    points = frontal_points(90)
+    add_jump(points, takeoff=30, landing=45, height=0.15)
+    bend_knee_inward(points, slice(45, 55), Side.LEFT, left_fppa)
+    return points
+
+
+def test_a_jump_seen_from_the_front_scores_the_valgus_of_each_knee() -> None:
+    analysis, _ = _analyze(_frontal_jump(left_fppa=25.0), Movement.JUMP)
+
+    assert analysis.view is CameraView.FRONT
+    assert analysis.risk.dominant_pattern == "knee_valgus_left"
+    assert set(analysis.risk.pattern_scores) == set(RiskSettings().RISK_FRONT_PATTERNS)
+    left = analysis.risk.repetitions[0].partials["knee_valgus_left"]
+    assert left.side is Side.LEFT and 45 <= left.peak_frame <= 55
+    assert left.measured_deg == pytest.approx(25.0, abs=1.0)
+    assert analysis.risk.repetitions[0].partials["knee_valgus_asymmetry"].side is Side.LEFT
+
+
+def test_a_squat_seen_from_the_front_finds_its_bottom_by_the_hip() -> None:
+    points = frontal_points(90)
+    points[20:50, [LEFT_HIP, RIGHT_HIP], 1] += 0.15 * np.sin(np.linspace(0, np.pi, 30))[:, None]
+
+    analysis, _ = _analyze(points, Movement.SQUAT)
+
+    assert analysis.view is CameraView.FRONT
+    assert [rep.window.detected_by for rep in analysis.risk.repetitions] == [DetectionMethod.HIP_BOTTOM]
+
+
+def test_a_diagonal_jump_keeps_the_side_analysis() -> None:
+    points = _frontal_jump(left_fppa=0.0)
+    for index in (LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_HIP, RIGHT_HIP):
+        points[:, index, 0] = 0.5 + (points[:, index, 0] - 0.5) * 0.5
+
+    analysis, _ = _analyze(points, Movement.JUMP)
+
+    assert analysis.view is CameraView.INCONCLUSIVE
+    assert set(analysis.risk.pattern_scores) <= set(RiskSettings().RISK_JUMP_PATTERNS)

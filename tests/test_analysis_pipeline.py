@@ -46,7 +46,7 @@ class _FakeAnalyzer:
     def __init__(self, frames: int, delay: float = 0.0) -> None:
         self.frames, self.delay = frames, delay
 
-    def analyze(self, video_path: Path, strategy, observer):
+    def analyze(self, video_path: Path, strategies, observer):
         assert video_path.exists()
         observer.on_stage(AnalysisStage.EXTRACTING_POSE)
         for processed in range(1, self.frames + 1):

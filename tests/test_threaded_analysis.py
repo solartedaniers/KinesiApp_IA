@@ -22,7 +22,7 @@ class _ScriptedAnalyzer:
         self.finished = threading.Event()
         self.thread_name = ""
 
-    def analyze(self, video_path: Path, strategy, observer):
+    def analyze(self, video_path: Path, strategies, observer):
         self.thread_name = threading.current_thread().name
         try:
             observer.on_stage(AnalysisStage.EXTRACTING_POSE)
@@ -39,7 +39,7 @@ class _ScriptedAnalyzer:
 
 
 async def _collect(analyzer, every: int = 2) -> list:
-    return [event async for event in ThreadedAnalysisRunner(every).run(analyzer, Path("v.mp4"), strategy=None)]
+    return [event async for event in ThreadedAnalysisRunner(every).run(analyzer, Path("v.mp4"), strategies=None)]
 
 
 def test_events_arrive_in_order_throttled_and_the_result_comes_last() -> None:
@@ -63,7 +63,7 @@ def test_an_analysis_error_reaches_the_stream_after_its_events() -> None:
 
     async def main():
         async for event in ThreadedAnalysisRunner(10).run(
-            _ScriptedAnalyzer(frames=3, error=NoMovementDetectedError("nothing")), Path("v.mp4"), strategy=None
+            _ScriptedAnalyzer(frames=3, error=NoMovementDetectedError("nothing")), Path("v.mp4"), strategies=None
         ):
             received.append(event)
 

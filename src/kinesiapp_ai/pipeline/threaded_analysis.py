@@ -1,12 +1,13 @@
 import asyncio
 import threading
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
 from kinesiapp_ai.analysis.errors import AnalysisCancelledError
 from kinesiapp_ai.analysis.movement_analyzer import AnalysisStage, MovementAnalysis, MovementAnalyzer
+from kinesiapp_ai.analysis.camera_view import CameraView
 from kinesiapp_ai.analysis.movement_strategy import MovementStrategy
 
 
@@ -62,13 +63,13 @@ class ThreadedAnalysisRunner:
         self._progress_every_frames = progress_every_frames
 
     async def run(
-        self, analyzer: MovementAnalyzer, video_path: Path, strategy: MovementStrategy
+        self, analyzer: MovementAnalyzer, video_path: Path, strategies: Mapping[CameraView, MovementStrategy]
     ) -> AsyncIterator[AnalysisEvent | MovementAnalysis]:
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
         cancelled = threading.Event()
         observer = _ForwardingObserver(loop, queue, cancelled, self._progress_every_frames)
-        work = asyncio.ensure_future(asyncio.to_thread(analyzer.analyze, video_path, strategy, observer))
+        work = asyncio.ensure_future(asyncio.to_thread(analyzer.analyze, video_path, strategies, observer))
         work.add_done_callback(lambda _: queue.put_nowait(_FINISHED))
         try:
             while (event := await queue.get()) is not _FINISHED:
