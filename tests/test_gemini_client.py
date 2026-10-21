@@ -7,7 +7,14 @@ import pytest
 from google.genai import errors, types
 
 from kinesiapp_ai.chat.gemini_client import GeminiLlmClient
-from kinesiapp_ai.chat.llm import LlmOverloadedError, LlmRequest, LlmTurn, LlmUnavailableError
+from kinesiapp_ai.chat.llm import (
+    LlmDailyQuotaError,
+    LlmOverloadedError,
+    LlmQuotaError,
+    LlmRequest,
+    LlmTurn,
+    LlmUnavailableError,
+)
 
 REQUEST = LlmRequest(system_instruction="instrucciones", turns=[LlmTurn(role="user", text="hola")])
 
@@ -152,11 +159,45 @@ def test_saturation_and_timeouts_before_any_text_are_overloaded_so_the_fallback_
         _collect(client, [])
 
 
-def test_quota_is_not_overloaded_so_the_fallback_does_not_spend_more_quota(monkeypatch: pytest.MonkeyPatch) -> None:
-    quota, _ = _client(monkeypatch, [], errors.ClientError(429, {"error": {"message": "quota"}}), fail_at_start=True)
+def _quota_error(quota_id: str) -> errors.ClientError:
+    # Copio la forma del 429 que devolvió Google el 21-oct
+    violation = {"quotaMetric": "generativelanguage.googleapis.com/generate_content_free_tier_requests", "quotaId": quota_id}
+    details = [{"@type": "type.googleapis.com/google.rpc.QuotaFailure", "violations": [violation]}]
+    return errors.ClientError(429, {"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "details": details}})
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (_quota_error("GenerateRequestsPerDayPerProjectPerModel-FreeTier"), LlmDailyQuotaError),
+        (_quota_error("GenerateRequestsPerMinutePerProjectPerModel-FreeTier"), LlmQuotaError),
+        (errors.ClientError(429, {"error": {"message": "quota"}}), LlmQuotaError),
+    ],
+    ids=["daily", "per-minute", "without-details"],
+)
+def test_quota_tells_daily_from_per_minute_and_lets_the_fallback_answer(
+    monkeypatch: pytest.MonkeyPatch, error, expected
+) -> None:
+    client, _ = _client(monkeypatch, [], error, fail_at_start=True)
+
+    with pytest.raises(LlmOverloadedError) as raised:
+        _collect(client, [])
+
+    assert type(raised.value) is expected
+
+
+@pytest.mark.parametrize(
+    "error",
+    [errors.ClientError(400, {"error": {"message": "bad"}}), errors.ClientError(404, {"error": {"message": "gone"}})],
+    ids=["400", "404"],
+)
+def test_request_errors_are_not_overloaded_because_the_fallback_would_fail_the_same(
+    monkeypatch: pytest.MonkeyPatch, error
+) -> None:
+    client, _ = _client(monkeypatch, [], error, fail_at_start=True)
 
     with pytest.raises(LlmUnavailableError) as raised:
-        _collect(quota, [])
+        _collect(client, [])
 
     assert not isinstance(raised.value, LlmOverloadedError)
 

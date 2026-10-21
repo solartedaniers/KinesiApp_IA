@@ -7,12 +7,20 @@ import httpx
 from google import genai
 from google.genai import errors, types
 
-from kinesiapp_ai.chat.llm import LlmOverloadedError, LlmRequest, LlmUnavailableError
+from kinesiapp_ai.chat.llm import (
+    LlmDailyQuotaError,
+    LlmOverloadedError,
+    LlmQuotaError,
+    LlmRequest,
+    LlmUnavailableError,
+)
 
 logger = logging.getLogger(__name__)
 
 # Saturación del modelo o plazo vencido del lado de Google: otro modelo puede responder
 _OVERLOADED_STATUS = {503, 504}
+_QUOTA_STATUS = 429
+_QUOTA_FAILURE_TYPE = "type.googleapis.com/google.rpc.QuotaFailure"
 
 
 class GeminiLlmClient:
@@ -73,8 +81,7 @@ class GeminiLlmClient:
             # Registro el código HTTP para distinguir cuota (429), modelo inexistente (404) o saturación (503)
             code = getattr(error, "code", None)
             timed_out = isinstance(error, (TimeoutError, httpx.TimeoutException))
-            transient = not produced and (code in _OVERLOADED_STATUS or timed_out)
-            failure = LlmOverloadedError if transient else LlmUnavailableError
+            failure = _failure_type(error, code, timed_out) if not produced else LlmUnavailableError
             raise failure(f"Gemini {self._model_name} failed: {type(error).__name__} {code or ''}".strip()) from error
         # Lo registro porque sin esto los logs no decían cuánto del chat era espera de Gemini ni cuánto razonó
         logger.info(
@@ -88,3 +95,23 @@ class GeminiLlmClient:
         # Sin texto la respuesta vino bloqueada por seguridad o cortada antes de generar nada
         if not produced:
             raise LlmUnavailableError("Empty response from Gemini")
+
+
+def _failure_type(error: Exception, code: int | None, timed_out: bool) -> type[LlmUnavailableError]:
+    if code == _QUOTA_STATUS:
+        return LlmDailyQuotaError if _is_daily_quota(error) else LlmQuotaError
+    if code in _OVERLOADED_STATUS or timed_out:
+        return LlmOverloadedError
+    return LlmUnavailableError
+
+
+def _is_daily_quota(error: Exception) -> bool:
+    # Google dice qué cuota se agotó en QuotaFailure: "...PerDay..." es la diaria, "...PerMinute..." la del minuto
+    details = getattr(error, "details", None)
+    entries = details.get("error", {}).get("details", []) if isinstance(details, dict) else []
+    return any(
+        "PerDay" in violation.get("quotaId", "")
+        for entry in entries
+        if entry.get("@type") == _QUOTA_FAILURE_TYPE
+        for violation in entry.get("violations", [])
+    )

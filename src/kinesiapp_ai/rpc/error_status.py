@@ -2,7 +2,7 @@ from grpc import StatusCode
 from kinesiapp.common.v1.errors_pb2 import ErrorReason
 
 from kinesiapp_ai.analysis.errors import NoMovementDetectedError, UnreadableVideoError, VideoTooLongError
-from kinesiapp_ai.chat.llm import LlmUnavailableError
+from kinesiapp_ai.chat.llm import LlmDailyQuotaError, LlmQuotaError, LlmUnavailableError
 
 ERROR_DOMAIN = "kinesiapp"
 _REASON_PREFIX = "ERROR_REASON_"
@@ -20,6 +20,8 @@ STATUS_BY_REASON: dict[ErrorReason.ValueType, StatusCode] = {
     ErrorReason.ERROR_REASON_AI_UNAVAILABLE: StatusCode.UNAVAILABLE,
     ErrorReason.ERROR_REASON_AI_BUSY: StatusCode.RESOURCE_EXHAUSTED,
     ErrorReason.ERROR_REASON_ASSISTANT_UNAVAILABLE: StatusCode.UNAVAILABLE,
+    ErrorReason.ERROR_REASON_ASSISTANT_BUSY: StatusCode.RESOURCE_EXHAUSTED,
+    ErrorReason.ERROR_REASON_ASSISTANT_DAILY_LIMIT: StatusCode.RESOURCE_EXHAUSTED,
 }
 
 # Traduzco aquí los fallos esperados del análisis y del asistente para que el dominio no dependa de los
@@ -29,6 +31,8 @@ REASON_BY_EXPECTED_ERROR: dict[type[Exception], ErrorReason.ValueType] = {
     VideoTooLongError: ErrorReason.ERROR_REASON_VIDEO_TOO_LONG,
     NoMovementDetectedError: ErrorReason.ERROR_REASON_NO_MOVEMENT_DETECTED,
     LlmUnavailableError: ErrorReason.ERROR_REASON_ASSISTANT_UNAVAILABLE,
+    LlmQuotaError: ErrorReason.ERROR_REASON_ASSISTANT_BUSY,
+    LlmDailyQuotaError: ErrorReason.ERROR_REASON_ASSISTANT_DAILY_LIMIT,
 }
 
 

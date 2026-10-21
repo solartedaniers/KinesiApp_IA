@@ -1,11 +1,19 @@
 """Pruebo cuándo el asistente recurre al modelo de respaldo y cuándo no."""
 
 import asyncio
+import logging
 
 import pytest
 
 from kinesiapp_ai.chat.fallback_llm import FallbackLlmClient
-from kinesiapp_ai.chat.llm import LlmOverloadedError, LlmRequest, LlmTurn, LlmUnavailableError
+from kinesiapp_ai.chat.llm import (
+    LlmDailyQuotaError,
+    LlmOverloadedError,
+    LlmQuotaError,
+    LlmRequest,
+    LlmTurn,
+    LlmUnavailableError,
+)
 
 REQUEST = LlmRequest(system_instruction="instrucciones", turns=[LlmTurn(role="user", text="hola")])
 
@@ -61,7 +69,7 @@ def test_an_overload_mid_stream_does_not_retry() -> None:
 
 
 def test_other_failures_of_the_primary_do_not_retry() -> None:
-    primary, fallback = _Model([], LlmUnavailableError("429 quota")), _Model(["respaldo"])
+    primary, fallback = _Model([], LlmUnavailableError("400 bad request")), _Model(["respaldo"])
 
     with pytest.raises(LlmUnavailableError):
         _collect(FallbackLlmClient(primary, fallback), [])
@@ -76,3 +84,35 @@ def test_when_the_fallback_also_fails_the_assistant_is_unavailable() -> None:
         _collect(FallbackLlmClient(primary, fallback), [])
 
     assert (primary.calls, fallback.calls) == (1, 1)
+
+
+def test_a_primary_out_of_quota_lets_the_fallback_answer_and_logs_why(caplog: pytest.LogCaptureFixture) -> None:
+    # La cuota es por modelo: el 21-oct 3.8-flash agotó la diaria y el respaldo todavía tenía la suya
+    primary = _Model([], LlmDailyQuotaError("Gemini gemini-3.8-flash failed: ClientError 429"))
+    fallback = _Model(["respaldo"])
+    received: list[str] = []
+
+    with caplog.at_level(logging.WARNING):
+        _collect(FallbackLlmClient(primary, fallback), received)
+
+    assert received == ["respaldo"]
+    assert "gemini-3.8-flash failed: ClientError 429" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("primary_error", "fallback_error", "expected"),
+    [
+        (LlmDailyQuotaError("429"), LlmDailyQuotaError("429"), LlmDailyQuotaError),
+        (LlmDailyQuotaError("429"), LlmQuotaError("429"), LlmQuotaError),
+        (LlmOverloadedError("timeout"), LlmDailyQuotaError("429"), LlmQuotaError),
+        (LlmQuotaError("429"), LlmOverloadedError("503"), LlmOverloadedError),
+    ],
+    ids=["both-daily", "fallback-per-minute", "primary-timed-out", "fallback-saturated"],
+)
+def test_only_when_both_models_spent_their_daily_quota_the_limit_is_daily(primary_error, fallback_error, expected) -> None:
+    primary, fallback = _Model([], primary_error), _Model([], fallback_error)
+
+    with pytest.raises(LlmUnavailableError) as raised:
+        _collect(FallbackLlmClient(primary, fallback), [])
+
+    assert type(raised.value) is expected

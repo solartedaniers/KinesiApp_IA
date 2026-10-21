@@ -8,7 +8,15 @@ class LlmUnavailableError(Exception):
 
 
 class LlmOverloadedError(LlmUnavailableError):
-    """El modelo está saturado (503 o 504) o no dio texto a tiempo: es temporal y otro modelo sí podría responder."""
+    """El modelo está saturado (503 o 504), agotó su cuota o no dio texto a tiempo: otro modelo sí podría responder."""
+
+
+class LlmQuotaError(LlmOverloadedError):
+    """El modelo agotó su cuota por minuto (429). La cuota es por modelo: el de respaldo tiene la suya."""
+
+
+class LlmDailyQuotaError(LlmQuotaError):
+    """El modelo agotó su cuota diaria (429): no vuelve hasta que el proveedor la reinicie."""
 
 
 @dataclass(frozen=True)

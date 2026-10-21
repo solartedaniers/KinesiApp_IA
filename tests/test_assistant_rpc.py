@@ -10,7 +10,7 @@ from kinesiapp.common.v1 import chat_pb2, identity_pb2, movement_pb2
 
 from kinesiapp_ai.chat.analysis_assistant import AnalysisAssistant
 from kinesiapp_ai.chat.assessment_details import RiskAssessmentDetails
-from kinesiapp_ai.chat.llm import LlmRequest, LlmUnavailableError
+from kinesiapp_ai.chat.llm import LlmDailyQuotaError, LlmQuotaError, LlmRequest, LlmUnavailableError
 from kinesiapp_ai.chat.pattern_catalog import RiskPatternCatalog
 from kinesiapp_ai.chat.prompt_builder import MovementAnalysisPromptBuilder
 from kinesiapp_ai.chat.system_prompt import SYSTEM_PROMPT_VERSION
@@ -91,6 +91,21 @@ def test_a_provider_failure_mid_stream_ends_as_assistant_unavailable_without_a_r
 
     assert [response.WhichOneof("event") for response in received] == ["text_delta"]
     assert (error.code(), error_reason(error)) == (grpc.StatusCode.UNAVAILABLE, "ASSISTANT_UNAVAILABLE")
+
+
+@pytest.mark.parametrize(
+    ("error", "reason"),
+    [(LlmQuotaError("429"), "ASSISTANT_BUSY"), (LlmDailyQuotaError("429"), "ASSISTANT_DAILY_LIMIT")],
+    ids=["per-minute", "daily"],
+)
+def test_a_spent_quota_ends_as_resource_exhausted_with_its_reason(error: Exception, reason: str) -> None:
+    llm = _ScriptedLlm([], error=error)
+    request = assistant_pb2.ExplainAnalysisRequest(facts=FACTS, audience=identity_pb2.USER_ROLE_ATHLETE)
+
+    received, rpc_error = asyncio.run(_stream(llm, "ExplainAnalysis", request))
+
+    assert received == []
+    assert (rpc_error.code(), error_reason(rpc_error)) == (grpc.StatusCode.RESOURCE_EXHAUSTED, reason)
 
 
 @pytest.mark.parametrize(
