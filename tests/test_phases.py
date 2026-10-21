@@ -1,11 +1,11 @@
-"""JumpPhaseDetector (sus tres reglas) y SquatBottomDetector, sobre series sintéticas."""
+"""JumpPhaseDetector (sus tres reglas), SquatBottomDetector y HipBottomDetector, sobre series sintéticas."""
 import numpy as np
 
 from kinesiapp_ai.analysis.angles import AngleCalculator
 from kinesiapp_ai.analysis.jump_phases import JumpPhaseDetector
 from kinesiapp_ai.analysis.movement_windows import DetectionMethod, MovementWindow
 from kinesiapp_ai.analysis.pose_series import LEFT_ANKLE, LEFT_HEEL, LEFT_HIP, RIGHT_ANKLE, RIGHT_HEEL, RIGHT_HIP
-from kinesiapp_ai.analysis.squat_phases import SquatBottomDetector
+from kinesiapp_ai.analysis.squat_phases import HipBottomDetector, SquatBottomDetector
 from kinesiapp_ai.analysis.trunk_hinge import FallbackWindowDetector, TrunkHingeDetector
 from tests.pose_fixtures import FEET, FPS, add_jump, angle_series, pose_series, standing_points
 
@@ -133,3 +133,25 @@ def test_fallback_uses_the_trunk_only_when_the_knee_finds_no_repetition():
     straight_legs = detector.detect(series, angle_series([5.0] * len(trunk), trunk))
     assert straight_legs == _hinge_detector().detect(series, angle_series([5.0] * len(trunk), trunk))
     assert len(straight_legs) == 1
+
+
+def _hip_bottoms(points: np.ndarray) -> list[MovementWindow]:
+    series = pose_series(points)
+    detector = HipBottomDetector(min_drop_body_fraction=0.1, min_distance_seconds=0.6, window_ms=200)
+    return detector.detect(series, AngleCalculator().calculate(series))
+
+
+def test_the_frontal_squat_bottom_is_the_lowest_hip():
+    points = standing_points(120)
+    for start in (20, 70):
+        # La cadera baja un 30 % del cuerpo y vuelve, en un segundo
+        points[start : start + 30, [LEFT_HIP, RIGHT_HIP], 1] += 0.15 * np.sin(np.linspace(0, np.pi, 30))[:, None]
+    windows = _hip_bottoms(points)
+    assert [window.detected_by for window in windows] == [DetectionMethod.HIP_BOTTOM] * 2
+    assert [(window.start_frame, window.end_frame) for window in windows] == [(31, 37), (81, 87)]
+
+
+def test_a_small_hip_sway_is_not_a_squat():
+    points = standing_points(120)
+    points[20:50, [LEFT_HIP, RIGHT_HIP], 1] += 0.02 * np.sin(np.linspace(0, np.pi, 30))[:, None]
+    assert _hip_bottoms(points) == []

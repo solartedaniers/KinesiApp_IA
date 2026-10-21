@@ -12,6 +12,7 @@ class DetectionMethod(str, enum.Enum):
     LANDING = "landing"
     KNEE_BOTTOM = "knee_bottom"
     TRUNK_HINGE = "trunk_hinge"
+    HIP_BOTTOM = "hip_bottom"
 
 
 @dataclass(frozen=True)

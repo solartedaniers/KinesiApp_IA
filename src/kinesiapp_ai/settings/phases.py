@@ -21,3 +21,5 @@ class MovementPhaseSettings(EnvSettings):
     # Uso este respaldo cuando la rodilla no deja picos (bisagra de cadera con piernas casi rectas). Como
     # umbral de tronco tomo RISK_SQUAT_TRUNK_LEAN_ONSET_DEG, el mismo donde empieza el riesgo
     SQUAT_HINGE_MIN_DURATION_SECONDS: float = Field(default=0.3, gt=0)
+    # De frente busco el fondo por la cadera: debe bajar al menos esta fracción del alto hombros-tobillos
+    SQUAT_HIP_BOTTOM_MIN_DROP_BODY_FRACTION: float = Field(default=0.1, gt=0)
