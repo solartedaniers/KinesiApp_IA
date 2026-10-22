@@ -11,7 +11,7 @@ from mediapipe.tasks.python.core.base_options import BaseOptions
 class PoseEstimator(Protocol):
     """Frontera hacia el modelo de pose: el resto del dominio no sabe que existe MediaPipe.
 
-    Una instancia por video (ver docs/design/video-analysis-pipeline.md §4.4).
+    Uso una instancia por video porque MediaPipe en modo VIDEO guarda estado entre frames.
     """
 
     def estimate(self, frame_bgr: np.ndarray, timestamp_ms: int) -> np.ndarray | None:

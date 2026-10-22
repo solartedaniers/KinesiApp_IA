@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from kinesiapp_ai.analysis.errors import UnreadableVideoError
+from kinesiapp_ai.analysis.errors import UnreadableVideoError, VideoTooLongError
 from kinesiapp_ai.analysis.person_detection import (
     BoundingBox,
     PersonDetector,
@@ -15,6 +15,9 @@ from kinesiapp_ai.analysis.person_detection import (
 from kinesiapp_ai.analysis.pose_estimator import PoseEstimator
 from kinesiapp_ai.analysis.pose_series import LANDMARK_COUNT, PoseSeries
 from kinesiapp_ai.analysis.video_reader import VideoFrameReader
+
+# Observer: recibe cuántos frames llevo procesados. Si lanza una excepción, la extracción se detiene
+FrameObserver = Callable[[int], None]
 
 
 @dataclass(frozen=True)
@@ -59,8 +62,12 @@ class MainPersonTracker:
         min_iou: float,
         max_missed_frames: int,
         smoothing: float,
+        detection_interval: int = 1,
     ) -> None:
         self._detector = detector
+        self._detection_interval = detection_interval
+        self._frames_seen = 0
+        self._last_region: CropRegion | None = None
         self._margin = margin
         self._min_relative_area = min_relative_area
         self._min_iou = min_iou
@@ -73,6 +80,15 @@ class MainPersonTracker:
         self._others: list[BoundingBox] = []
 
     def region(self, frame: np.ndarray) -> CropRegion | None:
+        position = self._frames_seen
+        self._frames_seen += 1
+        # Entre detecciones sostengo la última región: YOLO es lo que más tiempo se lleva del análisis
+        if position % self._detection_interval:
+            return self._last_region
+        self._last_region = self._detect(frame)
+        return self._last_region
+
+    def _detect(self, frame: np.ndarray) -> CropRegion | None:
         height, width = frame.shape[:2]
         boxes = self._detector.detect(frame)
         if self._athlete is None:
@@ -91,11 +107,12 @@ class MainPersonTracker:
         if match is not None and self._athlete.iou(match) >= self._min_iou:
             self._follow(match)
         elif candidates and self._missed_frames >= self._max_missed_frames:
-            # Perdido de verdad (se movió demasiado durante el hueco): se vuelve a elegir al principal
+            # Lo perdí de verdad (se movió demasiado durante el hueco): vuelvo a elegir al principal
             self._follow(most_prominent_person(candidates, width, height))
         else:
-            # Desenfoque u oclusión breve: se sostiene la última región conocida
-            self._missed_frames += 1
+            # Desenfoque u oclusión breve: sostengo la última región conocida. Cuento en frames del video,
+            # no en detecciones, para que el máximo signifique lo mismo con cualquier intervalo
+            self._missed_frames += self._detection_interval
 
     def _continues_someone_else(self, box: BoundingBox) -> bool:
         """La caja es otra persona del frame anterior: se solapa con ella más que con el atleta."""
@@ -134,20 +151,28 @@ class VideoPoseExtractor:
         frame_reader: VideoFrameReader,
         estimator_factory: Callable[[], PoseEstimator],
         tracker_factory: Callable[[], MainPersonTracker] | None = None,
+        max_duration_ms: int | None = None,
     ) -> None:
         self._frame_reader = frame_reader
         self._estimator_factory = estimator_factory
         self._tracker_factory = tracker_factory
+        self._max_duration_ms = max_duration_ms
 
-    def extract(self, video_path: Path) -> PoseSeries:
+    def extract(self, video_path: Path, on_frame: FrameObserver | None = None) -> PoseSeries:
         frames: list[np.ndarray] = []
         with self._frame_reader.open(video_path) as stream:
             estimator = self._estimator_factory()
             tracker = self._tracker_factory() if self._tracker_factory else None
             try:
                 for index, frame in enumerate(stream.frames):
-                    pose = self._estimate(estimator, tracker, frame, round(index * 1000 / stream.fps))
+                    timestamp_ms = round(index * 1000 / stream.fps)
+                    # Vuelvo a medir la duración con los frames reales: un archivo puede declarar menos de lo que trae
+                    if self._max_duration_ms is not None and timestamp_ms >= self._max_duration_ms:
+                        raise VideoTooLongError(f"Video {video_path} lasts more than {self._max_duration_ms} ms")
+                    pose = self._estimate(estimator, tracker, frame, timestamp_ms)
                     frames.append(pose if pose is not None else np.full((LANDMARK_COUNT, 3), np.nan))
+                    if on_frame is not None:
+                        on_frame(index + 1)
             finally:
                 estimator.close()
         if not frames:

@@ -1,10 +1,18 @@
-"""Riesgo por patrones (§5.2 y §5.6): rampas, estrategias y RiskScoreAggregator."""
+"""Riesgo por patrones: rampas, estrategias y RiskScoreAggregator."""
 import math
 
 import pytest
 
 from kinesiapp_ai.analysis.movement_windows import DetectionMethod, MovementWindow
-from kinesiapp_ai.analysis.risk import KneeFlexionRiskStrategy, LinearRamp, RiskScoreAggregator, TrunkFlexionRiskStrategy
+from kinesiapp_ai.analysis.pose_series import Side
+from kinesiapp_ai.analysis.risk import (
+    KneeFlexionRiskStrategy,
+    KneeValgusAsymmetryRiskStrategy,
+    KneeValgusRiskStrategy,
+    LinearRamp,
+    RiskScoreAggregator,
+    TrunkFlexionRiskStrategy,
+)
 from tests.pose_fixtures import angle_series
 
 WHOLE = MovementWindow(0, 2, DetectionMethod.LANDING)
@@ -53,3 +61,33 @@ def test_repetitions_are_combined_with_the_median():
 def test_pattern_with_unknown_partial_is_a_configuration_error():
     with pytest.raises(ValueError):
         RiskScoreAggregator([KneeFlexionRiskStrategy({"knee_deep": LinearRamp(0, 1)})], {"p": ["trunk_lean"]})
+
+
+def test_the_peak_carries_its_frame_and_the_measured_leg():
+    angles = angle_series([90, 20, 30, 40, 90], [0, 10, 50, 10, 0])
+    window = MovementWindow(1, 3, DetectionMethod.LANDING)
+    knee = KneeFlexionRiskStrategy({"deep": LinearRamp(0, 80)}).score(angles, window)["deep"]
+    trunk = TrunkFlexionRiskStrategy({"lean": LinearRamp(0, 80)}).score(angles, window)["lean"]
+    assert (knee.peak_frame, knee.side) == (3, Side.LEFT)
+    assert (trunk.peak_frame, trunk.side) == (2, None)
+
+
+def test_each_knee_valgus_is_scored_on_its_own_leg():
+    angles = angle_series([0] * 5, [0] * 5, {Side.LEFT: [0, 5, 20, 8, 0], Side.RIGHT: [0, 2, 3, 4, 30]})
+    window = MovementWindow(1, 3, DetectionMethod.LANDING)
+    partials = KneeValgusRiskStrategy(LinearRamp(10, 30), "knee_valgus").score(angles, window)
+    left, right = partials["knee_valgus_left"], partials["knee_valgus_right"]
+    assert (left.signal, left.measured_deg, left.score, left.peak_frame, left.side) == ("knee_valgus", 20, 0.5, 2, Side.LEFT)
+    assert (right.measured_deg, right.score, right.peak_frame, right.side) == (4, 0, 3, Side.RIGHT)
+
+
+def test_the_asymmetry_points_to_the_knee_that_goes_further_inward():
+    angles = angle_series([0] * 3, [0] * 3, {Side.LEFT: [0, 4, 2], Side.RIGHT: [1, 19, 3]})
+    partial = KneeValgusAsymmetryRiskStrategy(LinearRamp(10, 20), "asym").score(angles, WHOLE)["asym"]
+    assert (partial.measured_deg, partial.score, partial.side, partial.peak_frame) == (15, 0.5, Side.RIGHT, 1)
+
+
+def test_the_asymmetry_is_not_measured_without_both_knees():
+    angles = angle_series([0] * 3, [0] * 3, {Side.LEFT: [0, 4, 2], Side.RIGHT: [math.nan] * 3})
+    partial = KneeValgusAsymmetryRiskStrategy(LinearRamp(10, 20), "asym").score(angles, WHOLE)["asym"]
+    assert math.isnan(partial.score) and partial.peak_frame is None and partial.side is None

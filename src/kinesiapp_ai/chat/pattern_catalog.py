@@ -8,7 +8,7 @@ class PatternText:
     coaching_focus: str
 
 
-# Contenido curado de docs/design/video-analysis-pipeline.md §6.2. Placeholder sin revisión
+# Textos curados del diseño del pipeline. Son placeholders sin revisión
 # profesional, igual que los umbrales de riesgo: revisarlo antes de mostrarlo a usuarios reales
 PATTERN_TEXTS = {
     "rigid_landing": PatternText(
@@ -36,6 +36,24 @@ PATTERN_TEXTS = {
         ),
         coaching_focus="Bajar llevando las rodillas hacia adelante y la cadera hacia abajo, con el tronco más erguido.",
     ),
+    "knee_valgus_left": PatternText(
+        meaning=(
+            "Al recibir el peso, la rodilla izquierda se va hacia adentro (valgo dinámico): vistos de frente, "
+            "el muslo y la pierna dejan de estar alineados."
+        ),
+        coaching_focus="Mantener la rodilla izquierda en línea con la punta del pie al aterrizar o al bajar.",
+    ),
+    "knee_valgus_right": PatternText(
+        meaning=(
+            "Al recibir el peso, la rodilla derecha se va hacia adentro (valgo dinámico): vistos de frente, "
+            "el muslo y la pierna dejan de estar alineados."
+        ),
+        coaching_focus="Mantener la rodilla derecha en línea con la punta del pie al aterrizar o al bajar.",
+    ),
+    "valgus_asymmetry": PatternText(
+        meaning="En la misma repetición una rodilla se va hacia adentro bastante más que la otra: las piernas no reciben el peso igual.",
+        coaching_focus="Repartir el peso por igual entre las dos piernas y cuidar la alineación de la rodilla que más se desvía.",
+    ),
 }
 
 NO_PATTERN_TEXT = PatternText(
@@ -55,13 +73,39 @@ SIGNAL_DESCRIPTIONS = {
         "inclinación máxima del tronco respecto de la vertical en el fondo de la repetición "
         "(0° = erguido, 90° = horizontal)"
     ),
+    "knee_valgus_left": (
+        "ángulo de proyección frontal (FPPA) máximo de la rodilla izquierda en el aterrizaje o en el fondo "
+        "(0° = muslo y pierna alineados, positivo = rodilla hacia adentro, negativo = hacia afuera)"
+    ),
+    "knee_valgus_right": (
+        "ángulo de proyección frontal (FPPA) máximo de la rodilla derecha en el aterrizaje o en el fondo "
+        "(0° = muslo y pierna alineados, positivo = rodilla hacia adentro, negativo = hacia afuera)"
+    ),
+    "knee_valgus_asymmetry": "diferencia entre el FPPA máximo de las dos rodillas en la misma repetición",
 }
 
-MEASUREMENT_LIMITS = (
-    "Vista lateral u oblicua: no se evalúa el valgo de rodilla ni la asimetría entre piernas.",
+_COMMON_LIMITS = (
     "No se mide la curvatura de la espalda: el tronco se mide como la recta entre cadera y hombro.",
     "Los umbrales son valores de demostración sin validación clínica.",
 )
+MEASUREMENT_LIMITS = {
+    "side": (
+        "Vista lateral: no se evalúa el valgo de rodilla (la rodilla hacia adentro) ni la asimetría entre "
+        "piernas; para eso hay que grabar de frente.",
+        *_COMMON_LIMITS,
+    ),
+    "front": (
+        "Vista frontal: se mide el valgo de cada rodilla y la diferencia entre piernas; la flexión de rodilla "
+        "y la inclinación del tronco no se evalúan, se miden grabando de lado.",
+        "Los umbrales son valores de demostración sin validación clínica.",
+    ),
+    "inconclusive": (
+        "La cámara no estaba claramente de lado ni de frente: la flexión de rodilla y la inclinación del tronco "
+        "son aproximadas y el valgo de rodilla no se midió. Para medir si la rodilla se va hacia adentro hay "
+        "que grabar de frente.",
+        *_COMMON_LIMITS,
+    ),
+}
 
 
 class RiskPatternCatalog:
@@ -88,5 +132,5 @@ class RiskPatternCatalog:
         return SIGNAL_DESCRIPTIONS[code]
 
     @staticmethod
-    def measurement_limits() -> list[str]:
-        return list(MEASUREMENT_LIMITS)
+    def measurement_limits(camera_view: str) -> list[str]:
+        return list(MEASUREMENT_LIMITS[camera_view])

@@ -1,0 +1,55 @@
+# Pongo Envoy delante porque Render solo acepta HTTP/1.1 desde internet y en el plan free la IA no recibe
+# tráfico privado: recibo gRPC-Web del backend y lo traduzco a gRPC nativo hacia grpcio en el mismo
+# contenedor. El gRPC nativo por HTTP/2 (el ingress de Container Apps) lo dejo pasar tal cual, porque el filtro
+# solo traduce gRPC-Web: así un mismo puerto sirve a los dos transportes del backend. El secreto compartido lo
+# valida grpcio, no Envoy. Los marcadores __ASÍ__ los reemplazo en entrypoint.sh.
+static_resources:
+  listeners:
+    - name: grpc_web
+      address:
+        socket_address: { address: 0.0.0.0, port_value: __LISTEN_PORT__ }
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: grpc_web
+                codec_type: AUTO
+                route_config:
+                  name: ai
+                  virtual_hosts:
+                    - name: ai
+                      domains: ["*"]
+                      routes:
+                        # Respondo aquí el health check de Render, sin pasar por grpcio
+                        - match: { path: /healthz }
+                          direct_response: { status: 200, body: { inline_string: ok } }
+                        # Solo dejo pasar los servicios del contrato de IA; cualquier otra ruta es 404
+                        - match: { prefix: /kinesiapp.ai.v1. }
+                          route:
+                            cluster: grpc_ai
+                            # Quito el límite de Envoy porque cada RPC ya trae su propio deadline desde el backend
+                            timeout: 0s
+                http_filters:
+                  - name: envoy.filters.http.grpc_web
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.grpc_web.v3.GrpcWeb
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  clusters:
+    - name: grpc_ai
+      type: STATIC
+      connect_timeout: __ENVOY_CONNECT_TIMEOUT__
+      load_assignment:
+        cluster_name: grpc_ai
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: 127.0.0.1, port_value: __GRPC_PORT__ }
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}

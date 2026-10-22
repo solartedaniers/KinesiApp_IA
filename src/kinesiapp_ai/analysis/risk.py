@@ -7,6 +7,7 @@ import numpy as np
 
 from kinesiapp_ai.analysis.angles import AngleSeries
 from kinesiapp_ai.analysis.movement_windows import MovementWindow
+from kinesiapp_ai.analysis.pose_series import Side
 
 
 @dataclass(frozen=True)
@@ -32,13 +33,16 @@ class LinearRamp:
 @dataclass(frozen=True)
 class PartialScore:
     """Score de una señal en una repetición, con lo necesario para explicarlo: el ángulo medido y
-    la rampa vigente al procesar (así no se relee de Settings, que puede haber cambiado)."""
+    la rampa vigente al procesar (así no se relee de Settings, que puede haber cambiado). También el frame
+    del pico y la pierna medida, para mostrar en qué instante y en qué lado ocurrió."""
 
     signal: str
     score: float
     measured_deg: float
     onset_deg: float
     saturation_deg: float
+    peak_frame: int | None = None
+    side: Side | None = None
 
     @property
     def higher_is_riskier(self) -> bool:
@@ -55,14 +59,23 @@ class RiskScoringStrategy(Protocol):
     def score(self, angles: AngleSeries, window: MovementWindow) -> dict[str, PartialScore]: ...
 
 
-def _peak(values: np.ndarray, window: MovementWindow) -> float:
+@dataclass(frozen=True)
+class _Peak:
+    value: float
+    frame: int | None
+
+
+def _peak(values: np.ndarray, window: MovementWindow) -> _Peak:
     in_window = values[window.slice()]
-    return math.nan if np.isnan(in_window).all() else float(np.nanmax(in_window))
+    if np.isnan(in_window).all():
+        return _Peak(math.nan, None)
+    offset = int(np.nanargmax(in_window))
+    return _Peak(float(in_window[offset]), window.start_frame + offset)
 
 
-def _score_peak(signal: str, peak: float, ramps: dict[str, LinearRamp]) -> dict[str, PartialScore]:
+def _score_peak(signal: str, peak: _Peak, ramps: dict[str, LinearRamp], side: Side | None) -> dict[str, PartialScore]:
     return {
-        code: PartialScore(signal, ramp.score(peak), peak, ramp.onset, ramp.saturation)
+        code: PartialScore(signal, ramp.score(peak.value), peak.value, ramp.onset, ramp.saturation, peak.frame, side)
         for code, ramp in ramps.items()
     }
 
@@ -80,7 +93,8 @@ class KneeFlexionRiskStrategy:
         return frozenset(self._ramps)
 
     def score(self, angles: AngleSeries, window: MovementWindow) -> dict[str, PartialScore]:
-        return _score_peak(self.SIGNAL, _peak(angles.knee_flexion, window), self._ramps)
+        # De lado mido la pierna más visible: es la que señalo como lado en riesgo
+        return _score_peak(self.SIGNAL, _peak(angles.knee_flexion, window), self._ramps, angles.side)
 
 
 class TrunkFlexionRiskStrategy:
@@ -96,7 +110,51 @@ class TrunkFlexionRiskStrategy:
         return frozenset(self._ramps)
 
     def score(self, angles: AngleSeries, window: MovementWindow) -> dict[str, PartialScore]:
-        return _score_peak(self.SIGNAL, _peak(angles.trunk_inclination, window), self._ramps)
+        return _score_peak(self.SIGNAL, _peak(angles.trunk_inclination, window), self._ramps, None)
+
+
+class KneeValgusRiskStrategy:
+    """Valgo máximo (FPPA) de cada rodilla en la ventana, vista de frente. Da un parcial por pierna, con
+    el código `{code_prefix}_{lado}`, para que cada lado pueda dispararse solo."""
+
+    SIGNAL = "knee_valgus"
+
+    def __init__(self, ramp: LinearRamp, code_prefix: str) -> None:
+        self._ramp = ramp
+        self._codes = {side: f"{code_prefix}_{side.value}" for side in Side}
+
+    @property
+    def partial_codes(self) -> frozenset[str]:
+        return frozenset(self._codes.values())
+
+    def score(self, angles: AngleSeries, window: MovementWindow) -> dict[str, PartialScore]:
+        partials = {}
+        for side, code in self._codes.items():
+            partials.update(_score_peak(self.SIGNAL, _peak(angles.knee_valgus[side], window), {code: self._ramp}, side))
+        return partials
+
+
+class KneeValgusAsymmetryRiskStrategy:
+    """Diferencia entre el valgo máximo de las dos rodillas en la ventana. Marco como lado en riesgo y como
+    instante los de la rodilla que más se va hacia adentro."""
+
+    SIGNAL = "knee_valgus"
+
+    def __init__(self, ramp: LinearRamp, code: str) -> None:
+        self._ramp = ramp
+        self._code = code
+
+    @property
+    def partial_codes(self) -> frozenset[str]:
+        return frozenset({self._code})
+
+    def score(self, angles: AngleSeries, window: MovementWindow) -> dict[str, PartialScore]:
+        peaks = {side: _peak(angles.knee_valgus[side], window) for side in Side}
+        if any(peak.frame is None for peak in peaks.values()):
+            return _score_peak(self.SIGNAL, _Peak(math.nan, None), {self._code: self._ramp}, None)
+        worse = max(peaks, key=lambda side: peaks[side].value)
+        gap = _Peak(abs(peaks[Side.LEFT].value - peaks[Side.RIGHT].value), peaks[worse].frame)
+        return _score_peak(self.SIGNAL, gap, {self._code: self._ramp}, worse)
 
 
 @dataclass(frozen=True)
@@ -117,7 +175,7 @@ class AggregatedRisk:
 
 
 class RiskScoreAggregator:
-    """Combina parciales por patrones (docs/design/video-analysis-pipeline.md §5.2).
+    """Combina parciales por patrones.
 
     Patrón = parciales que deben darse juntos: su score en una ventana es el mínimo de ellos.
     Entre repeticiones, la mediana. El risk_score es el del peor patrón. No promedia: un promedio

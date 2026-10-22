@@ -1,9 +1,22 @@
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
 
 class LlmUnavailableError(Exception):
     """El proveedor no pudo responder: timeout, cuota agotada, red o respuesta bloqueada."""
+
+
+class LlmOverloadedError(LlmUnavailableError):
+    """El modelo está saturado (503 o 504), agotó su cuota o no dio texto a tiempo: otro modelo sí podría responder."""
+
+
+class LlmQuotaError(LlmOverloadedError):
+    """El modelo agotó su cuota por minuto (429). La cuota es por modelo: el de respaldo tiene la suya."""
+
+
+class LlmDailyQuotaError(LlmQuotaError):
+    """El modelo agotó su cuota diaria (429): no vuelve hasta que el proveedor la reinicie."""
 
 
 @dataclass(frozen=True)
@@ -21,11 +34,6 @@ class LlmRequest:
 class LlmClient(Protocol):
     """Frontera hacia el proveedor de LLM: el resto del dominio no sabe que es Gemini."""
 
-    def generate_reply(self, request: LlmRequest) -> str: ...
-
-
-class UnconfiguredLlmClient:
-    """Se usa cuando no hay API key: el chat degrada a 503 en vez de impedir que arranque la app."""
-
-    def generate_reply(self, request: LlmRequest) -> str:
-        raise LlmUnavailableError("No LLM API key configured")
+    def stream_reply(self, request: LlmRequest) -> AsyncIterator[str]:
+        """Entrego la respuesta por partes, en cuanto el proveedor las genera."""
+        ...
