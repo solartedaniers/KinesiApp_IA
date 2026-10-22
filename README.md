@@ -4,7 +4,12 @@ La app está publicada en **https://www.kinesiapp.com**.
 
 Es el microservicio de inteligencia artificial de KinesiApp, un servidor gRPC asíncrono en Python. Hace dos cosas:
 
-- **Analiza el movimiento.** Descarga el video del bucket, detecta a la persona con YOLO, estima la pose con MediaPipe, calcula los ángulos de rodilla y tronco por repetición y devuelve un puntaje de riesgo con su desglose.
+- **Analiza el movimiento.** Descarga el video del bucket, detecta a la persona con YOLO y estima la pose con MediaPipe. Después detecto automáticamente desde dónde se grabó (`analysis/camera_view.py`): comparo el ancho aparente de hombros y caderas con el alto del torso, en la mediana de todo el video.
+  - **De perfil**, calculo los ángulos de rodilla y tronco por repetición.
+  - **De frente**, mido el valgo de cada rodilla (cuánto se va hacia adentro) y la asimetría entre las dos.
+  - Si la vista no es clara, la marco como inconclusa y la analizo como de perfil.
+
+  En todos los casos devuelvo un puntaje de riesgo con su desglose, y la vista detectada va en `risk_assessment.camera_view`.
 - **Explica el resultado.** Arma el prompt con los datos estructurados que le manda el backend y responde con Gemini en streaming.
 
 Solo lo llama el backend. El frontend nunca habla con la IA.
