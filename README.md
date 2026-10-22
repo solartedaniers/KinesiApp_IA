@@ -41,7 +41,7 @@ Los umbrales de riesgo son placeholders de orden de magnitud tomados del spike, 
 
 Toda la configuración está en `src/kinesiapp_ai/settings/`, como clases de `pydantic-settings` por dominio. `.env.example` explica cada variable. `AI_SERVICE_TOKEN` y `GEMINI_API_KEY` no tienen default: sin ellas la IA no arranca. Los parámetros más importantes son:
 
-- `ANALYSIS_MAX_CONCURRENCY`: un análisis a la vez con 512 MB de RAM;
+- `ANALYSIS_MAX_CONCURRENCY`: un análisis a la vez, porque la réplica de Azure tiene 1 vCPU y 2 GiB;
 - `ANALYSIS_MAX_VIDEO_DURATION_SECONDS`: 40 s;
 - `ANALYSIS_MAX_FRAME_SIDE_PX`: recomiendo 720, porque con un video de 1080×1920 el pico de memoria baja de 451 a 417 MiB y el resultado es idéntico;
 - `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL` y `GEMINI_THINKING_LEVEL`: con el razonamiento por defecto, el modelo gastaba casi toda la salida pensando y la respuesta quedaba truncada.
@@ -87,4 +87,4 @@ Las pruebas no llaman a Gemini: usan dobles del modelo de lenguaje. Las de pose 
   - Cada revisión apunta a una imagen inmutable por SHA. Producción corre la revisión `kinesiapp-ia--0000006`, con la imagen del commit de `main` `7dc09ed`. Para volver atrás se activa la revisión anterior con su imagen (`az containerapp update --image ...`).
 - **Por qué no Render.** La CPU fraccionada del plan free (0.1) no daba los tiempos. En Azure, con 1 vCPU, un análisis de 40 s tarda 32–37 s y el arranque en frío unos 20–33 s.
 - **Costos vigilados.** Hay un presupuesto mensual de 50 USD con avisos, y una alerta cuando el tiempo de réplicas pasa de unos 120 minutos en 6 h.
-- **Memoria medida** con MediaPipe, OpenCV, onnxruntime y google-genai cargados: el pico es de 340–373 MB a 474×850 y de 451 MiB a 1080×1920 sin reducir. Cabe en 512 MB, con poco margen.
+- **Memoria medida** con MediaPipe, OpenCV, onnxruntime y google-genai cargados: el pico es de 340–373 MB a 474×850 y de 451 MiB a 1080×1920 sin reducir. Lo medí pensando en los 512 MB de Render; en Azure la réplica tiene 2 GiB, así que sobra margen.
