@@ -1,5 +1,7 @@
 # KinesiApp IA
 
+La app está publicada en **https://www.kinesiapp.com**.
+
 Es el microservicio de inteligencia artificial de KinesiApp, un servidor gRPC asíncrono en Python. Hace dos cosas:
 
 - **Analiza el movimiento.** Descarga el video del bucket, detecta a la persona con YOLO, estima la pose con MediaPipe, calcula los ángulos de rodilla y tronco por repetición y devuelve un puntaje de riesgo con su desglose.
@@ -37,18 +39,41 @@ backend (Render Frankfurt) ──gRPC nativo + TLS──▶ ingress HTTP/2 de Az
 
 Los umbrales de riesgo son placeholders de orden de magnitud tomados del spike, **sin validación clínica**. Viven en `settings/risk.py` y se pueden ajustar por variable de entorno.
 
+## Requisitos
+
+- **Python 3.12**, la misma versión de la imagen (`python:3.12-slim`).
+- **Git** con submódulos, porque los contratos llegan en `contracts/`.
+- **curl**, para bajar los dos modelos la primera vez.
+- **Docker** (uso Docker Desktop 29.4), solo si quiero correr el contenedor con Envoy como en Azure.
+- **Azure CLI** (`az`), solo para desplegar una imagen nueva.
+
 ## Configuración
 
-Toda la configuración está en `src/kinesiapp_ai/settings/`, como clases de `pydantic-settings` por dominio. `.env.example` explica cada variable. `AI_SERVICE_TOKEN` y `GEMINI_API_KEY` no tienen default: sin ellas la IA no arranca. Los parámetros más importantes son:
+Toda la configuración está en `src/kinesiapp_ai/settings/`, como clases de `pydantic-settings` por dominio. `AI_SERVICE_TOKEN`, `GEMINI_API_KEY` y `VIDEO_DOWNLOAD_ALLOWED_HOSTS` no tienen default: sin ellas la IA no arranca. Copio `.env.example` a `.env` y lo lleno así. El `.env` nunca va al repo.
 
-- `ANALYSIS_MAX_CONCURRENCY`: un análisis a la vez, porque la réplica de Azure tiene 1 vCPU y 2 GiB;
-- `ANALYSIS_MAX_VIDEO_DURATION_SECONDS`: 40 s;
-- `ANALYSIS_MAX_FRAME_SIDE_PX`: recomiendo 720, porque con un video de 1080×1920 el pico de memoria baja de 451 a 417 MiB y el resultado es idéntico;
-- `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL` y `GEMINI_THINKING_LEVEL`: con el razonamiento por defecto, el modelo gastaba casi toda la salida pensando y la respuesta quedaba truncada.
+| Variable | Para qué la uso | De dónde saco el valor | Secreta |
+|---|---|---|---|
+| `AI_SERVICE_TOKEN` | El secreto compartido con el backend, de 32 caracteres o más. El backend lo manda en `authorization: Bearer` y yo lo comparo en tiempo constante. | Lo genero con `python -c "import secrets; print(secrets.token_urlsafe(48))"` y pongo el mismo en el backend | **Sí** |
+| `GEMINI_API_KEY` | La clave con la que llamo a Gemini para explicar el análisis y responder el chat. | Google AI Studio → Get API key | **Sí** |
+| `VIDEO_DOWNLOAD_ALLOWED_HOSTS` | Los únicos hosts desde los que descargo videos, en una lista JSON. Pongo solo el host del endpoint de Neon Storage, sin `https://`. Así nadie me hace descargar de otro lado. | Neon → Storage, el host del endpoint | No es secreta, pero no la publico |
+| `VIDEO_DOWNLOAD_MAX_BYTES`, `VIDEO_DOWNLOAD_CONNECT_TIMEOUT_SECONDS`, `VIDEO_DOWNLOAD_TOTAL_TIMEOUT_SECONDS`, `VIDEO_DOWNLOAD_MAX_REDIRECTS` | Los topes de la descarga: 100 MB, 10 s para conectar, 120 s en total y 3 redirecciones. | Default | No |
+| `GRPC_HOST`, `GRPC_PORT`, `GRPC_SHUTDOWN_GRACE_SECONDS` | Dónde escucha `grpcio` (`127.0.0.1:50051`) y cuánto dejo terminar las llamadas al apagar. Solo Envoy queda expuesto. | Default | No |
+| `PORT`, `ENVOY_CONNECT_TIMEOUT` | Solo los lee `deploy/entrypoint.sh`: el puerto público de Envoy (8080) y lo que espera para conectar con `grpcio`. No van en el `.env`. | Default | No |
+| `ANALYSIS_MAX_CONCURRENCY` | Cuántos análisis corro a la vez. Uso 1 porque la réplica de Azure tiene 1 vCPU y 2 GiB. | Default | No |
+| `ANALYSIS_MAX_VIDEO_DURATION_SECONDS` | El tope de duración del video, 40 s, el mismo del backend. | Default | No |
+| `ANALYSIS_MAX_FRAME_SIDE_PX` | El lado mayor al que reduzco cada frame; vacío analiza a la resolución original. Recomiendo 720: con un video de 1080×1920, el pico de memoria baja de 451 a 417 MiB y el resultado es idéntico. | Lo decido yo | No |
+| `ANALYSIS_MAX_FPS` | Un tope de frames por segundo; vacío usa todos. Bajarlo cambia los puntajes. | Lo decido yo | No |
+| `ANALYSIS_PROGRESS_EVERY_FRAMES` | Cada cuántos frames emito progreso por el stream. | Default (10) | No |
+| `PERSON_DETECTOR_INTERVAL_FRAMES` | Cada cuántos frames corro YOLO. Entre medias sostengo el recorte de la persona. | Default (1) | No |
+| `PERSON_DETECTOR_THREADS` | Los hilos de YOLO; vacío usa uno por núcleo. En Render, con 0.1 de CPU, 1 hilo rendía mucho más. | Lo decido yo | No |
+| `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL` | El modelo principal y el de respaldo, al que recurro una sola vez si el principal da 429, 503 o 504, o si se queda callado antes del primer texto. | Los elijo yo | No |
+| `GEMINI_TIMEOUT_SECONDS`, `GEMINI_FIRST_TEXT_TIMEOUT_SECONDS`, `GEMINI_MAX_OUTPUT_TOKENS` | El plazo de la respuesta (30 s), lo que espero el primer texto (6 s) y el tope de salida (1024 tokens). | Default | No |
+| `GEMINI_THINKING_LEVEL` | Cuánto razona el modelo. Con el nivel por defecto del modelo, gastaba casi toda la salida pensando y la respuesta quedaba truncada. | Default (`MINIMAL`) | No |
+| `CHAT_QUESTION_MAX_CHARS`, `CHAT_HISTORY_MAX_MESSAGES`, `CHAT_PROMPT_MAX_REPETITIONS` | El largo de la pregunta y cuánto historial y cuántas repeticiones meto en el prompt. | Default | No |
+
+Los umbrales de pose, de detección de repeticiones y de riesgo (`POSE_*`, `PERSON_*`, `JUMP_*`, `SQUAT_*`, `RISK_*`) también se pueden cambiar por variable de entorno. No van en `.env.example` porque sus defaults salen del spike y viven en `settings/pose.py`, `settings/phases.py` y `settings/risk.py`.
 
 ## Cómo correrlo
-
-Necesito Python 3.12.
 
 ```bash
 git clone --recurse-submodules https://github.com/solartedaniers/KinesiApp_IA.git
@@ -58,7 +83,7 @@ python scripts/generate_grpc.py
 # Modelos (el Dockerfile los descarga fijados por checksum)
 curl -L -o models/pose_landmarker_full.task https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task
 curl -L -o models/yolo11n.onnx https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n.onnx
-cp .env.example .env              # y lleno AI_SERVICE_TOKEN, GEMINI_API_KEY y los hosts permitidos
+cp .env.example .env              # y lo lleno con la tabla de Configuración
 PYTHONPATH=src:generated python -m kinesiapp_ai.rpc.server
 ```
 
