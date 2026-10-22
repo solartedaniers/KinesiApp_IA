@@ -102,6 +102,48 @@ pytest
 
 Las pruebas no llaman a Gemini: usan dobles del modelo de lenguaje. Las de pose usan series sintéticas (`tests/pose_fixtures.py`). Las que necesitan los videos reales del spike o los modelos descargados se saltan si no los encuentran.
 
+## Errores comunes
+
+| Lo que veo | Por qué pasa | Cómo lo arreglo |
+|---|---|---|
+| `contracts/` está vacío o `generate_grpc.py` no encuentra los `.proto` | Cloné sin `--recurse-submodules`. | `git submodule update --init` y vuelvo a generar. |
+| `ModuleNotFoundError` de `kinesiapp_ai` o de `kinesiapp` | Falta el path del código o el generado. | `PYTHONPATH=src:generated`. En PowerShell es `$env:PYTHONPATH="src;generated"`, porque en Windows el separador es `;`. |
+| La IA no arranca porque no encuentra `models/pose_landmarker_full.task` o `models/yolo11n.onnx` | Los modelos no van en el repo. | Los bajo con los dos `curl` de "Cómo correrlo". La imagen los descarga sola, con checksum. |
+| No arranca con un `ValidationError` de pydantic | Falta `AI_SERVICE_TOKEN` o tiene menos de 32 caracteres; falta `GEMINI_API_KEY`; o `VIDEO_DOWNLOAD_ALLOWED_HOSTS` no es JSON válido. | Lleno la variable que dice el error. Los hosts van como `["host"]`, con comillas dobles. |
+| `UNAUTHENTICATED` en cada llamada | El `AI_SERVICE_TOKEN` del backend no es el mismo que el mío. | Pongo el mismo valor en Render y en los secretos de Container Apps. |
+| `INVALID_ARGUMENT` con "Video host is not allowed" | El video viene de un host que no está en `VIDEO_DOWNLOAD_ALLOWED_HOSTS`, por ejemplo después de cambiar el endpoint de Neon Storage. | Agrego ese host, sin `https://`. |
+| `INTERNAL` con `RST_STREAM` a los ~40 s | El ingress de Azure corta el stream de `AnalyzeVideo` cuando esa llamada es la que despierta la réplica. | El backend llama a `WarmUp` antes de analizar. Si llamo a mano, primero despierto la IA con `WarmUp`. |
+| Gemini responde 429 | Se acabó la cuota gratuita. | Recurro una vez al modelo de respaldo. Si también falla, espero a que se renueve la cuota. |
+| La respuesta del chat sale cortada o tarda en empezar | El modelo gasta la salida razonando. | Dejo `GEMINI_THINKING_LEVEL=MINIMAL` o `LOW`. |
+| La memoria se dispara con videos de 1080p en una máquina chica | Analizo los frames a la resolución original. | `ANALYSIS_MAX_FRAME_SIDE_PX=720`, que da el mismo resultado. |
+| Hice push y Azure sigue con la versión vieja | El push solo construye la imagen; Azure no la toma sola. | Corro `az containerapp update` con la imagen nueva (ver "Flujo de trabajo"). |
+
+## Flujo de trabajo
+
+- **Trabajo en ramas feature.** Aquí es `feature/grpc-ai`. Nunca hago commit directo en `main`; fusiono con `--no-ff` cuando el cambio está probado.
+- **El push a `main` despliega a producción** el backend (Render) y el frontend (Vercel), cada uno desde su repo.
+- **La IA necesita el `az containerapp update`.** El push a `main` o a `feature/grpc-ai` que toque el código construye y publica `ghcr.io/solartedaniers/kinesiapp-ai:<sha>`. Azure sigue en su revisión hasta que corro:
+  ```bash
+  az containerapp update -n kinesiapp-ia -g kinesiapp-rg --image ghcr.io/solartedaniers/kinesiapp-ai:<sha>
+  ```
+  Después reviso que la revisión nueva quede sana y que `WarmUp` responda.
+- **Las migraciones se corren a mano** desde el backend, con Alembic. La IA no tiene base.
+- **Las previews usan la base real.** Los previews del frontend hablan con el backend de producción y, a través de él, con esta IA de producción. Lo que se analiza en un preview gasta cuota de Gemini y queda en la base real.
+- **Contract-first.** Si cambia un RPC de `kinesiapp.ai.v1`, primero va el contrato con un tag nuevo en KinesiApp-Contracts. Después muevo el submódulo y regenero.
+
+## Producción
+
+La app está publicada en **https://www.kinesiapp.com**.
+
+| Servicio | Dónde corre | Cómo llega a producción |
+|---|---|---|
+| Frontend (Next.js) | Vercel, con las funciones en `fra1` (Fráncfort) | Push a `main`, automático |
+| Backend (Envoy + `grpcio`) | Render en Frankfurt, como servicio Docker | Push a `main`, automático |
+| IA (este repo) | Azure Container Apps en `canadacentral`, con 1 vCPU, 2 GiB y 0 a 1 réplica | `az containerapp update` con la imagen de GHCR |
+| Base de datos | Neon Postgres en Frankfurt, branch `production` | Migraciones a mano con Alembic |
+| Archivos | Neon Storage, buckets privados | — |
+| Correo | Resend, desde `no-reply@kinesiapp.com` | — |
+
 ## Despliegue
 
 - **Imagen.** GitHub Actions (`.github/workflows/image.yml`) construye la imagen en cada push a `main` o a `feature/grpc-ai` que toque el código, y la publica en GHCR como `ghcr.io/solartedaniers/kinesiapp-ai:<sha>`. No uso ACR.
