@@ -3,7 +3,7 @@ name: image
 
 on:
   push:
-    branches: [main, feature/grpc-ai]
+    branches: [main]
     paths: [Dockerfile, pyproject.toml, src/**, deploy/**, scripts/generate_grpc.py, contracts, .github/workflows/image.yml]
   workflow_dispatch:
 

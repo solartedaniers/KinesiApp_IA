@@ -301,9 +301,9 @@ Las pruebas no llaman a Gemini: usan dobles del modelo de lenguaje. Las de pose 
 
 ## Flujo de trabajo
 
-- **Trabajo en ramas feature.** Aquí es `feature/grpc-ai`. Nunca hago commit directo en `main`; fusiono con `--no-ff` cuando el cambio está probado.
+- **Trabajo en una rama feature corta por cambio.** Nunca hago commit directo en `main`: creo la rama, la fusiono a `main` con `--no-ff` cuando el cambio está probado y la borro, local y en GitHub. En el repo solo queda `main`.
 - **El push a `main` despliega a producción** el backend (Render) y el frontend (Vercel), cada uno desde su repo.
-- **La IA necesita el `az containerapp update`.** El push a `main` o a `feature/grpc-ai` que toque el código construye y publica `ghcr.io/solartedaniers/kinesiapp-ai:<sha>`. Azure sigue en su revisión hasta que corro:
+- **La IA necesita el `az containerapp update`.** El push a `main` que toque el código construye y publica `ghcr.io/solartedaniers/kinesiapp-ai:<sha>`. Azure sigue en su revisión hasta que corro:
   ```bash
   az containerapp update -n kinesiapp-ia -g kinesiapp-rg --image ghcr.io/solartedaniers/kinesiapp-ai:<sha>
   ```
@@ -327,7 +327,7 @@ La app está publicada en **https://www.kinesiapp.com**.
 
 ## Despliegue
 
-- **Imagen.** GitHub Actions (`.github/workflows/image.yml`) construye la imagen en cada push a `main` o a `feature/grpc-ai` que toque el código, y la publica en GHCR como `ghcr.io/solartedaniers/kinesiapp-ai:<sha>`. No uso ACR.
+- **Imagen.** GitHub Actions (`.github/workflows/image.yml`) construye la imagen en cada push a `main` que toque el código, y la publica en GHCR como `ghcr.io/solartedaniers/kinesiapp-ai:<sha>`. No uso ACR.
 - **Azure Container Apps.**
   - La app `kinesiapp-ia` vive en el grupo de recursos `kinesiapp-rg` (`canadacentral`), dentro del entorno `kinesiapp-env` con Workload Profiles, porque el modo Express no acepta HTTP/2.
   - Corre con 1 vCPU y 2 GiB, entre 0 y 1 réplica, cooldown de 300 s e ingress HTTP/2 con TLS.
