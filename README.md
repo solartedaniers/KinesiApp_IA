@@ -19,7 +19,7 @@ Solo lo llama el backend. El frontend nunca habla con la IA.
 KinesiApp son cuatro repos que se hablan solo por RPC definidos en [KinesiApp-Contracts](https://github.com/solartedaniers/KinesiApp-Contracts), sin API REST. Este diagrama y el de secuencia son los mismos en los cuatro README; cada flecha dice su protocolo.
 
 ```mermaid
-flowchart LR
+flowchart TB
   user(["Navegador"])
 
   subgraph vercel["Vercel · fra1"]
@@ -42,8 +42,10 @@ flowchart LR
     s3[("Neon Storage<br/>buckets privados")]
   end
 
-  gemini["Gemini API"]
-  resend["Resend"]
+  subgraph external["Servicios externos"]
+    gemini["Gemini API"]
+    resend["Resend"]
+  end
 
   user -- "HTTPS: HTML, RSC y Server Actions" --> next
   user -- "HTTPS PUT y GET con URL firmada" --> s3
@@ -57,6 +59,32 @@ flowchart LR
   ai -- "HTTPS GET con URL firmada" --> s3
   ai -- "HTTPS, SDK google-genai" --> gemini
   api -- "HTTPS, API de correo" --> resend
+
+  classDef browser fill:#e5e7eb,stroke:#374151,stroke-width:2px,color:#111827
+  classDef vercelNode fill:#d1d5db,stroke:#111827,stroke-width:2px,color:#111827
+  classDef renderNode fill:#ddd6fe,stroke:#5b21b6,stroke-width:2px,color:#1e1b4b
+  classDef azureNode fill:#bfdbfe,stroke:#1d4ed8,stroke-width:2px,color:#172554
+  classDef neonNode fill:#a7f3d0,stroke:#047857,stroke-width:2px,color:#064e3b
+  classDef externalNode fill:#fde68a,stroke:#b45309,stroke-width:2px,color:#451a03
+  classDef vercelZone fill:#f3f4f6,stroke:#111827,stroke-width:2px,color:#111827
+  classDef renderZone fill:#f5f3ff,stroke:#5b21b6,stroke-width:2px,color:#1e1b4b
+  classDef azureZone fill:#eff6ff,stroke:#1d4ed8,stroke-width:2px,color:#172554
+  classDef neonZone fill:#ecfdf5,stroke:#047857,stroke-width:2px,color:#064e3b
+  classDef externalZone fill:#fffbeb,stroke:#b45309,stroke-width:2px,color:#451a03
+
+  class user browser
+  class next vercelNode
+  class envoyB,api renderNode
+  class ingress,envoyA,ai azureNode
+  class pg,s3 neonNode
+  class gemini,resend externalNode
+  class vercel vercelZone
+  class render renderZone
+  class azure azureZone
+  class neon neonZone
+  class external externalZone
+
+  linkStyle default stroke:#6e7781,stroke-width:2px
 ```
 
 ### Flujo principal: subir un video, analizarlo, ver el resultado y preguntar al chat
