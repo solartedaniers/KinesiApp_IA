@@ -14,13 +14,161 @@ Es el microservicio de inteligencia artificial de KinesiApp, un servidor gRPC as
 
 Solo lo llama el backend. El frontend nunca habla con la IA.
 
-## Arquitectura
+## Arquitectura de KinesiApp
 
+KinesiApp son cuatro repos que se hablan solo por RPC definidos en [KinesiApp-Contracts](https://github.com/solartedaniers/KinesiApp-Contracts), sin API REST. Este diagrama y el de secuencia son los mismos en los cuatro README; cada flecha dice su protocolo.
+
+```mermaid
+flowchart LR
+  user(["Navegador"])
+
+  subgraph vercel["Vercel · fra1"]
+    next["Next.js<br/>Server Components y Server Actions<br/>runtime Node"]
+  end
+
+  subgraph render["Render · Frankfurt · un solo contenedor"]
+    envoyB["Envoy<br/>gRPC-Web → gRPC"]
+    api["Backend grpcio<br/>Python asyncio"]
+  end
+
+  subgraph azure["Azure Container Apps · canadacentral"]
+    ingress["Ingress HTTP/2 + TLS"]
+    envoyA["Envoy"]
+    ai["IA grpcio<br/>YOLO · MediaPipe · OpenCV"]
+  end
+
+  subgraph neon["Neon · Frankfurt"]
+    pg[("Postgres")]
+    s3[("Neon Storage<br/>buckets privados")]
+  end
+
+  gemini["Gemini API"]
+  resend["Resend"]
+
+  user -- "HTTPS: HTML, RSC y Server Actions" --> next
+  user -- "HTTPS PUT y GET con URL firmada" --> s3
+  next -- "gRPC-Web sobre HTTP/1.1 + TLS" --> envoyB
+  envoyB -- "gRPC nativo, HTTP/2 en localhost" --> api
+  api -- "protocolo Postgres + TLS, por el pooler" --> pg
+  api -- "API S3 por HTTPS: HEAD, GET parcial y DELETE" --> s3
+  api -- "gRPC nativo + TLS" --> ingress
+  ingress -- "HTTP/2" --> envoyA
+  envoyA -- "gRPC nativo en localhost" --> ai
+  ai -- "HTTPS GET con URL firmada" --> s3
+  ai -- "HTTPS, SDK google-genai" --> gemini
+  api -- "HTTPS, API de correo" --> resend
 ```
-backend (Render Frankfurt) ──gRPC nativo + TLS──▶ ingress HTTP/2 de Azure Container Apps
-                                                     │
-                                                     ▼
-                              Envoy :8080 (gRPC nativo o gRPC-Web) ──▶ grpcio :50051
+
+### Flujo principal: subir un video, analizarlo, ver el resultado y preguntar al chat
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as Deportista en el navegador
+  participant N as Next.js en Vercel
+  participant B as Backend en Render
+  participant S as Neon Storage
+  participant P as Neon Postgres
+  participant A as IA en Azure
+  participant G as Gemini
+
+  U->>N: Elige el movimiento y el video (máximo 40 s, lo valida un Web Worker)
+  N->>B: CreateVideoUpload
+  B-->>N: URL firmada de subida y upload_id
+  U->>S: PUT del video directo al bucket privado
+  N->>B: ConfirmVideoUpload
+  B->>S: HEAD y primeros bytes: tamaño, tipo y magic bytes
+  B->>P: Crea el análisis en PENDING
+  B-->>N: analysis_id
+  N->>B: WatchAnalysis (server streaming)
+  B->>A: WarmUp
+  B->>A: AnalyzeVideo con URL firmada de lectura (server streaming)
+  A->>S: GET del video
+  loop Por cada etapa: descarga, pose, repeticiones y riesgo
+    A-->>B: Progreso
+    B->>P: Guarda el progreso
+    B-->>N: Progreso
+    N-->>U: Anillo de progreso en vivo
+  end
+  A-->>B: Resultado: ángulos por cuadro y evaluación de riesgo
+  B->>P: Guarda las mediciones y el riesgo (PROCESSED)
+  B-->>N: Análisis terminado
+  N->>B: GetAnalysis y GetVideoPlaybackUrl
+  B-->>N: Resultado y URL firmada de corta vida
+  N-->>U: Resultados con Streaming SSR
+  U->>S: GET del video para verlo con el esqueleto
+  U->>N: Abre el chat
+  N->>B: StartConversation (server streaming)
+  B->>P: Lee el análisis
+  B->>A: ExplainAnalysis con los datos estructurados
+  A->>G: Prompt que arma la IA
+  G-->>A: Texto en streaming
+  A-->>B: Fragmentos
+  B-->>N: Fragmentos
+  N-->>U: La explicación se escribe en vivo
+  B->>P: Guarda la explicación
+  U->>N: Hace una pregunta
+  N->>B: SendMessage (server streaming)
+  B->>A: AnswerQuestion con los datos y el historial
+  A->>G: Prompt
+  G-->>A: Texto en streaming
+  A-->>B: Fragmentos
+  B-->>N: Fragmentos
+  N-->>U: Respuesta en vivo
+  B->>P: Guarda la pregunta y la respuesta
+```
+
+### Qué hace cada parte
+
+- **Navegador.** Ahí la persona graba o elige el video. Valido la duración en un Web Worker y subo el archivo directo al bucket con una URL firmada, así el video nunca pasa por Vercel. El navegador no habla gRPC ni conoce la URL del backend.
+- **Next.js en Vercel.** Sirve las páginas con el patrón que le toca a cada una (SSG, ISR, SSR con streaming y CSR) y, desde los Server Components y las Server Actions, llama al backend con un cliente gRPC-Web generado del contrato. Guarda la sesión en cookies `httpOnly`.
+- **Envoy en Render.** Render solo acepta HTTP/1.1 desde internet, así que Envoy recibe gRPC-Web y lo traduce a gRPC nativo hacia grpcio, en el mismo contenedor. Solo deja pasar las rutas del contrato.
+- **Backend grpcio en Render.** Es el dueño de los datos y de las reglas: cuentas, roles, deportistas, equipos, análisis y chat. Verifica el token en un interceptor, guarda en Postgres, firma las URLs de los archivos y le encarga el trabajo pesado a la IA.
+- **IA en Azure Container Apps.** Es un microservicio gRPC propio. Analiza el video con YOLO, MediaPipe y OpenCV y devuelve en streaming el progreso, los ángulos y el riesgo. También arma el prompt del chat y habla con Gemini. Baja a cero réplicas cuando nadie la usa, por eso el backend la despierta con `WarmUp`.
+- **Neon Postgres.** Guarda las cuentas, los perfiles, los equipos, los análisis con sus mediciones y los mensajes del chat. Está en Frankfurt, junto al backend, para que cada consulta tarde poco.
+- **Neon Storage.** Son buckets privados compatibles con S3 para los videos, las fotos y los logos. Solo se entra con URLs firmadas de corta vida.
+- **Gemini.** Es el modelo de lenguaje que redacta la explicación del análisis y responde las preguntas. Solo lo llama la IA.
+- **Resend.** Envía desde `no-reply@kinesiapp.com` los correos con el código de verificación y el de recuperación de contraseña.
+
+## Arquitectura de este repo
+
+```mermaid
+flowchart TB
+  backend["Backend en Render"] -- "gRPC nativo + TLS" --> ingress["Ingress de Azure, HTTP/2 + TLS"]
+  ingress --> envoy["Envoy en :8080<br/>gRPC nativo o gRPC-Web de respaldo"]
+  envoy -- "gRPC nativo" --> auth
+
+  subgraph grpcio["grpcio en :50051"]
+    auth["Interceptor del secreto compartido<br/>AI_SERVICE_TOKEN"]
+    analysis["MovementAnalysisService<br/>AnalyzeVideo, server streaming"]
+    assistant["AssistantService<br/>ExplainAnalysis y AnswerQuestion"]
+    lifecycle["AiLifecycleService.WarmUp<br/>y grpc.health.v1.Health"]
+  end
+
+  auth --> analysis
+  auth --> assistant
+  auth --> lifecycle
+
+  analysis --> slots["AnalysisSlots + hilo aparte"]
+  slots --> download["HttpVideoSource<br/>descarga con tope de bytes"]
+  download -- "HTTPS GET con URL firmada" --> s3[("Neon Storage")]
+  slots --> analyzer
+
+  subgraph analyzer["MovementAnalyzer"]
+    pose["Pose con YOLO + MediaPipe"]
+    view["Vista de la cámara: perfil o frente"]
+    strategy["Strategy del movimiento<br/>salto o sentadilla"]
+    risk["Ángulos, repeticiones y riesgo"]
+    pose --> view
+    view --> strategy
+    strategy --> risk
+  end
+
+  assistant --> prompt["PromptBuilder"]
+  prompt --> fallback["FallbackLlm<br/>modelo de respaldo ante 429, 503 o 504"]
+  fallback --> gemini["GeminiClient (Adapter)"]
+  gemini -- "HTTPS" --> api["Gemini API"]
+  lifecycle --> warmer["ModelWarmer<br/>carga los modelos"]
 ```
 
 - **Contract-first.** Implemento el paquete `kinesiapp.ai.v1` de [KinesiApp-Contracts](https://github.com/solartedaniers/KinesiApp-Contracts), que traigo como submódulo en `contracts/` fijado a un tag. `scripts/generate_grpc.py` genera `generated/`, que no se versiona.
